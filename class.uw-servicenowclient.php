@@ -17,12 +17,12 @@ class UW_ServiceNowClient {
 
   public function execute($pagename, $params=array(), $headers=array(), $method='GET', $content='')
   {
-    $url = $this->options['base_url'] . $pagename . '.do?JSONv2&' . http_build_query($params);
+    $url = $this->options['base_url'] . '/' . $pagename . '.do?JSONv2&' . http_build_query($params);
 
     $cred = sprintf('Authorization: Basic %s',
 		    base64_encode( $this->options['username'] . ':' . $this->options['password'] ) );
 
-    $headers = array_merge($cred, $headers);
+    $headers = array_merge(array($cred), $headers);
 
     $opts = array(
 		  'http' => array(
