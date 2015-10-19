@@ -35,9 +35,81 @@ function uw_classrooms_init()
 }
 
 
-function get_location_sys_id($post)
+add_action('admin_menu', 'uw_classrooms_menu');
+function uw_classrooms_menu() {
+  add_options_page('UW Classrooms Options', 'UW Classrooms', 'manage_options', 'uw-classrooms-options', 'uw_classrooms_options' );
+}
+
+
+function uw_classrooms_options() {
+  $hidden_field_name = 'uw_submit_hidden';
+
+  // variables for the field and option names
+  $url = 'uw_SN_URL';
+  $data_url = 'uw_SN_URL';
+  $user = 'uw_SN_USER';
+  $data_user = 'uw_SN_USER';
+  $pass = 'uw_SN_PASS';
+  $data_pass = 'uw_SN_PASS';
+
+  // Read in existing option value from database
+  $url_val = get_option( $url );
+  $user_val = get_option( $user );
+  $pass_val = get_option( $pass );
+
+  // See if the user has posted us some information
+  // If they did, this hidden field will be set to 'Y'
+  if( isset($_POST[ $hidden_field_name ]) && $_POST[ $hidden_field_name ] == 'Y' ) { 
+    // Read their posted value
+    $url_val = $_POST[ $data_url ];
+    $user_val = $_POST[ $data_user ];
+    $pass_val = $_POST[ $data_pass ];
+
+    // Save the posted value in the database
+    update_option( $url, $url_val );
+    update_option( $user, $user_val );
+    update_option( $pass, $pass_val );
+
+    flush_rewrite_rules();
+?>
+      <div class="updated"><p><strong><?php _e('settings saved.', 'menu' ); ?></strong></p></div>
+<?php
+										  }
+  // Now display the settings editing screen
+  echo '<div class="wrap">';
+  // header
+  echo "<h2>" . __( 'UW Classrooms Plugin Settings', 'menu' ) . "</h2>";
+  // settings form
+  ?>
+
+<form name="form1" method="post" action="">
+<input type="hidden" name="<?php echo $hidden_field_name; ?>" value="Y">
+
+   <p><?php _e("ServiceNow URL:", 'menu' ); ?>
+<input type="text" name="<?php echo $data_url; ?>" value="<?php echo $url_val; ?>" size="20">
+</p><hr />
+
+   <p><?php _e("ServiceNow User:", 'menu' ); ?>
+<input type="text" name="<?php echo $data_user; ?>" value="<?php echo $user_val; ?>" size="20">
+</p><hr />
+
+   <p><?php _e("ServiceNow Pass:", 'menu' ); ?>
+<input type="password" name="<?php echo $data_pass; ?>" value="<?php echo $pass_val; ?>" size="20">
+
+</p><hr /><p class="submit">
+<input type="submit" name="Submit" class="button-primary" value="<?php esc_attr_e('Save Changes') ?>" />
+</p>
+
+</form>
+</div>
+<?php
+}
+
+
+
+function get_location_sys_id()
 {
-  global $uw_snclient;
+  global $post, $uw_snclient;
 
   if ( $location_sys_id = get_post_meta($post->ID, 'uw-location-sys-id', true) )
     return $location_sys_id;
@@ -48,7 +120,7 @@ function get_location_sys_id($post)
   if ( !$room = get_post_meta($post->ID, 'uw-room-number', true) )
     return false;
 
-  $result = json_decode($uw_snclient->get_records('cmn_location', "parent.u_fac_code={$building}^u_room_number={$room}"), false);
+  $result = json_decode($uw_snclient->get_records('cmn_location', "parent.u_fac_code={$building}^u_room_number={$room}"), true);
 
   if (count($result['records']) != 1)
     return false;
@@ -278,6 +350,10 @@ function uw_classrooms_room_content($content)
   $content .= get_instructions_link();
 
   $content .= get_schematic_link();
+
+  if ($sys_id = get_location_sys_id()) {
+    $content .= $sys_id;
+  }
 
   $content .= '<p><a href="http://www.cte.uw.edu/pdf/electkey.pdf">Key for electrical symbols</a></p>';
 
