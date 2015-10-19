@@ -36,6 +36,19 @@ class UW_ServiceNowClient {
     return file_get_contents($url, false, $ctx);
   }
 
+  public function get($table, $sys_id, $displayvalue='all')
+  {
+    $pagename = $table . '_list';
+
+    $params = array(
+		    'sysparm_action' => 'get',
+		    'sysparm_sys_id' => $sys_id,
+		    'displayvalue' => $displayvalue,
+		    );
+
+    return $this->execute($pagename, $params);
+  }
+
   public function get_records($table, $query, $displayvalue='all')
   {
     $pagename = $table . '_list';
