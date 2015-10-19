@@ -133,6 +133,112 @@ function get_location_sys_id()
 }
 
 
+function get_location_assets()
+{
+  global $post, $uw_snclient;
+
+  if ( $location_assets = get_post_meta($post->ID, 'uw-location-assets', true) )
+    return $location_assets;
+
+  if ( !$location_sys_id = get_location_sys_id())
+    return false;
+
+  $result = json_decode($uw_snclient->get_records('alm_hardware', "location={$location_sys_id}^install_status=1^u_publish=true"), true);
+
+  if (count($result['records']) < 1)
+    return false;
+
+  //Hack to establish order of asset sections
+  $assets['Control System'][0] = '';
+  $assets['Equipment'][0] = '';
+  $assets['Conferencing Unit'][0] = '';
+  $assets['Lecture Capture'][0] = '';
+
+  foreach ($result['records'] as $record) {
+    //Pull in model info
+    $result = json_decode($uw_snclient->get('cmdb_model', $record['model']), true);
+
+    $record['model'] = $result['records'][0];
+
+    if ( !$record['u_short_description'] ) {
+      $record['u_short_description'] = $record['model']['short_description'];
+    }
+
+    if ( $record['model']['short_description'] == 'Conferencing Unit' ) {
+      $record['Type'] = $record['model']['short_description'];
+    }
+
+    if ( $record['u_short_description'] == 'Automated Panopto Recorder' ||
+	 $record['u_short_description'] == 'Audio/Video Bridge' ) {
+      $record['Type'] = 'Lecture Capture';
+    }
+
+    if ( !$record['Type'] ) {
+      $record['Type'] = $record['model']['u_sub_category'];
+    }
+
+    if ( !$record['Type'] ) {
+      $record['Type'] = $record['dv_model_category'];
+    }
+
+
+    if ($record['Type'] == 'Control System'
+      || $record['Type'] == 'Conferencing Unit'
+	|| $record['Type'] == 'Lecture Capture') {
+      $assets[$record['Type']][$record['u_number']] = $record;
+    }
+    else {
+      $assets['Equipment'][$record['u_number']] = $record;
+    }
+  }
+
+  unset($assets['Control System'][0]);
+  unset($assets['Equipment'][0]);
+  unset($assets['Conferencing Unit'][0]);
+  unset($assets['Lecture Capture'][0]);
+
+  if (!count($assets))
+    return false;
+
+  foreach ($assets as $type => $items) {
+
+    $equipment = array();
+    $quantity = array();
+
+    if (!count($items))
+      continue;
+
+    foreach($items as $item) {
+      if ($item['u_short_description']) {
+	$item['Name'] = $item['u_short_description'];
+      } elseif ($item['model']['short_description']) {
+	$item['Name'] = $item['model']['short_description'];
+      } elseif ($item['dv_model']) {
+	$item['Name'] = $item['dv_model'];
+      } else {
+	$item['Name'] = $item['display_name'];
+      }
+      $equipment[$item['Name']] = $item;
+      if (!isset($quantity[$item['Name']]))
+	$quantity[$item['Name']] = 0;
+
+      $quantity[$item['Name']]++;
+    }
+
+    foreach($equipment as $row) {
+
+      $location_assets[$type][$row['Name']]['type'] = $row['Type'];
+      $location_assets[$type][$row['Name']]['quantity'] = $quantity[$row['Name']];
+
+    }
+  }
+
+  add_post_meta($post->ID, 'uw-location-assets', $location_assets, true);
+
+  return $location_assets;
+}
+
+
 function get_map_link()
 {
   global $post;
@@ -351,9 +457,7 @@ function uw_classrooms_room_content($content)
 
   $content .= get_schematic_link();
 
-  if ($sys_id = get_location_sys_id()) {
-    $content .= $sys_id;
-  }
+  $content .= get_location_assets();
 
   $content .= '<p><a href="http://www.cte.uw.edu/pdf/electkey.pdf">Key for electrical symbols</a></p>';
 
