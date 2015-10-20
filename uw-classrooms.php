@@ -585,8 +585,10 @@ function update_classrooms() {
 	die("incorrect room post_name {$new_room->post_name}? : " . print_r($post, true));
 
       $types = array('Classroom');
-      if ($room['room_type'] != 'Classroom')
+      if ($room['room_type'] != 'Classroom') {
 	$types[] = $room['room_type'];
+	$all_room_types[$room['room_type']] = true;
+      }
 
 #      print_r($types);
       wp_set_object_terms($room_id, $types, 'location-type');
@@ -598,5 +600,15 @@ function update_classrooms() {
 
     }
 
+  }
+
+
+  // Organize term heirarchy
+
+  $classroom = get_term_by('name', 'Classroom', 'location-type');
+
+  foreach (array_keys($all_room_types) as $type) {
+    $room_type = get_term_by('name', $type, 'location-type');
+    wp_update_term($room_type->term_id, 'location-type', array('parent' => $classroom->term_id));
   }
 }
