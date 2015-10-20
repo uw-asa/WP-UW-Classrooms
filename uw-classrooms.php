@@ -24,6 +24,11 @@ function uw_classrooms_init()
 						   'hierarchical' => true,
 						   ));
 
+  register_taxonomy('location-attributes', 'page', array(
+							 'label' => 'Attributes',
+							 'hierarchical' => true,
+							 ));
+
   $uw_snclient = new UW_ServiceNowClient(array(
 					       'base_url' => get_option('uw_SN_URL'),
 					       'username' => get_option('uw_SN_USER'),
