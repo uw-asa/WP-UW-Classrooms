@@ -239,6 +239,37 @@ function get_location_assets()
 }
 
 
+function get_location_asset_list()
+{
+  global $post;
+
+  if ( !$building = get_post_meta($post->ID, 'uw-building-code', true) )
+    return false;
+
+  if ( !$room = get_post_meta($post->ID, 'uw-room-number', true) )
+    return false;
+
+  if ( !$location_assets = get_location_assets())
+    return false;
+
+  $content = '';
+  foreach ($location_assets as $type => $items) {
+    $content .= "<h3>{$type}</h3><ul>";
+    foreach ($items as $item => $meta) {
+      $content .= '<li><a href="http://www.cte.uw.edu/equipment/?room=' . urlencode("{$building} {$room}") . '&type=' . $meta['type'] . '">';
+      if ($meta['quantity'] == 1)
+	$content .= $item;
+      else
+	$content .= "{$meta['quantity']} {$item}s";
+      $content .= '</a></li>';
+    }
+    $content .= "</ul>";
+  }
+
+  return $content;
+}
+
+
 function get_map_link()
 {
   global $post;
@@ -457,7 +488,7 @@ function uw_classrooms_room_content($content)
 
   $content .= get_schematic_link();
 
-  $content .= get_location_assets();
+  $content .= get_location_asset_list();
 
   $content .= '<p><a href="http://www.cte.uw.edu/pdf/electkey.pdf">Key for electrical symbols</a></p>';
 
