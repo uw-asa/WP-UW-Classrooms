@@ -471,7 +471,7 @@ function get_page_by_name($pagename)
 {
   $pages = get_pages();
   foreach ($pages as $page) {
-    if ($page->post_name == sanitize_title($name)) {
+    if ($page->post_name == sanitize_title($pagename)) {
       return $page;
     }
   }
@@ -482,6 +482,9 @@ function get_page_by_name($pagename)
 
 register_activation_hook(__FILE__, 'update_classrooms');
 function update_classrooms() {
+
+  uw_classrooms_init();
+
   $buildings_import = json_decode(file_get_contents("http://www.cte.uw.edu/buildings?json"), true);
 
   foreach ($buildings_import as $code => $building) {
@@ -498,11 +501,17 @@ function update_classrooms() {
 		  'post_content' => '',
 		  );
 
-    if ($b = get_page_by_name($code)) {
+    if ($b = get_page_by_name($code))
       $post['ID'] = $b->ID;
-    }
 
     $building_id = wp_insert_post($post, false);
+    $new_building = get_post($building_id);
+
+    if ($post['ID'] && $building_id != $post['ID'])
+      die("duplicate building $building_id? : ". print_r($post, true));
+
+    if ($new_building->post_name != sanitize_title($code))
+      die("incorrect building post_name {$new_building->post_name}? : " . print_r($post, true));
 
     wp_set_object_terms($building_id, 'Building', 'location-type');
     update_post_meta($building_id, 'uw-building-code', $code);
@@ -531,8 +540,15 @@ function update_classrooms() {
         $post['ID'] = $r->ID;
 
       $room_id = wp_insert_post($post, false);
+      $new_room = get_post($room_id);
 
-      $types = array('classroom');
+      if ($post['ID'] && $room_id != $post['ID'])
+	die("duplicate room $room_id? : ". print_r($post, true));
+
+      if ($new_room->post_name != sanitize_title($codenum))
+	die("incorrect room post_name {$new_room->post_name}? : " . print_r($post, true));
+
+      $types = array('Classroom');
       if ($room['room_type'] != 'Classroom')
 	$types[] = $room['room_type'];
 
