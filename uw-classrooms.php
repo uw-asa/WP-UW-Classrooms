@@ -16,7 +16,7 @@ add_filter('pigen_filter_convert_imageMagick', 'uw_classrooms_pigen_filter_conve
 function uw_classrooms_pigen_filter_convert_imageMagick($imageMagick, $old, $new)
 {
   # trim extra whitespace around schematics
-  $imageMagick = "convert -quality 90 -background white -flatten -trim {$old} {$new}";
+  $imageMagick .= "; mogrify -trim {$new}";
   return $imageMagick;
 }
 
@@ -30,6 +30,16 @@ function uw_classrooms_uw_campus_map_buildingcode($buildingCode)
     return $code;
     
   return $buildingCode;
+}
+
+
+add_filter('widget_text', 'uw_classrooms_widget_text_schematic_image', 10, 2);
+function uw_classrooms_widget_text_schematic_image($text, $instance)
+{
+  if ( $instance['title'] == 'Schematic' && ($link = get_schematic_link()) )
+    return $link . '<p><a href="http://www.cte.uw.edu/pdf/electkey.pdf">Key for electrical symbols</a></p>';
+
+  return $text;
 }
 
 
@@ -577,13 +587,9 @@ function uw_classrooms_room_content($content)
 
   $content .= get_instructions_link();
 
-  $content .= get_schematic_link();
-
   $content .= get_location_asset_list();
 
   $content .= get_location_attributes_list();
-
-  $content .= '<p><a href="http://www.cte.uw.edu/pdf/electkey.pdf">Key for electrical symbols</a></p>';
 
   $content .= file_get_contents("http://www.cte.uw.edu/room/$building+$room");
 
