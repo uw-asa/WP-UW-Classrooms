@@ -21,15 +21,14 @@ function uw_classrooms_pigen_filter_convert_imageMagick($imageMagick, $old, $new
 }
 
 
-add_filter('uw_campus_map_buildingcode', 'uw_classrooms_uw_campus_map_buildingcode');
-function uw_classrooms_uw_campus_map_buildingcode($buildingCode)
+add_filter('uw_campus_map_buildingcode', 'do_shortcode');
+
+add_shortcode('buildingcode', 'get_location_buildingcode');
+function get_location_buildingcode()
 {
   global $post;
 
-  if ($code = get_location_meta($post->ID, 'u_fac_code'))
-    return $code;
-    
-  return $buildingCode;
+  return get_location_meta($post->ID, 'u_fac_code');
 }
 
 
