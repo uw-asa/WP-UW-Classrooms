@@ -33,14 +33,9 @@ function uw_classrooms_uw_campus_map_buildingcode($buildingCode)
 }
 
 
-add_filter('widget_text', 'uw_classrooms_widget_text_schematic_image', 10, 2);
-function uw_classrooms_widget_text_schematic_image($text, $instance)
-{
-  if ( $instance['title'] == 'Schematic' && ($link = get_schematic_link()) )
-    return $link . '<p><a href="http://www.cte.uw.edu/pdf/electkey.pdf">Key for electrical symbols</a></p>';
-
-  return $text;
-}
+#enable shortcode in widget text
+add_filter( 'widget_text', 'shortcode_unautop' );
+add_filter( 'widget_text', 'do_shortcode' );
 
 
 add_action('init', 'uw_classrooms_init');
@@ -116,6 +111,7 @@ function init_room_page($sn_room)
 		     'post_title' => "{$building_page->post_title} {$sn_room['u_room_number']}", #$sn_room['u_long_name']
 		     'post_type' => 'page',
 		     'post_parent' => $building_page->ID,
+		     'post_content' => "[photoalbum]\n\n[instructions]\n\n[assets]\n\n[attributes]\n",
 		     );
 
   $id = wp_insert_post($room_page, false);
@@ -349,6 +345,7 @@ function get_location_assets()
 }
 
 
+add_shortcode('assets', 'get_location_asset_list');
 function get_location_asset_list()
 {
   global $post;
@@ -380,6 +377,7 @@ function get_location_asset_list()
 }
 
 
+add_shortcode('attributes', 'get_location_attributes_list');
 function get_location_attributes_list()
 {
   global $post;
@@ -395,6 +393,7 @@ function get_location_attributes_list()
 }
 
 
+add_shortcode('accessibility', 'get_access_link');
 function get_access_link()
 {
   global $post;
@@ -447,6 +446,7 @@ function get_access_link()
 }
 
 
+add_shortcode('photoalbum', 'get_album_link');
 function get_album_link()
 {
   global $post;
@@ -469,6 +469,7 @@ function get_album_link()
 }
 
 
+add_shortcode('instructions', 'get_instructions_link');
 function get_instructions_link()
 {
   $pdfs = get_attached_media('application/pdf');
@@ -481,6 +482,7 @@ function get_instructions_link()
 }
 
 
+add_shortcode('schematic', 'get_schematic_link');
 function get_schematic_link()
 {
   $pdfs = get_attached_media('application/pdf');
@@ -502,8 +504,6 @@ function uw_classrooms_building_content($content)
 
   if ( !has_term('building', 'location-type') )
     return $content;
-
-  $content .= get_access_link();
 
   $room_list = get_pages(array('child_of' => $post->ID));
 
@@ -564,34 +564,6 @@ function uw_classrooms_building_content($content)
       </table>
       <br />
       <p><a name="external link">*</a> - External links are not maintained by CTE and the URLs may change or stop working without notice.</p>';
-
-  return $content;
-}
-
-
-add_filter('the_content', 'uw_classrooms_room_content');
-function uw_classrooms_room_content($content)
-{
-  global $post;
-
-  if ( !has_term('classroom', 'location-type') )
-    return $content;
-
-  if ( !$building = get_location_meta($post->ID, 'u_fac_code') )
-      return $content;
-
-  if ( !$room = get_location_meta($post->ID, 'u_room_number') )
-      return $content;
-
-  $content .= get_album_link();
-
-  $content .= get_instructions_link();
-
-  $content .= get_location_asset_list();
-
-  $content .= get_location_attributes_list();
-
-#  $content .= file_get_contents("http://www.cte.uw.edu/room/$building+$room");
 
   return $content;
 }
