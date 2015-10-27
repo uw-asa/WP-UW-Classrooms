@@ -9,15 +9,36 @@ License:     GPL2
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 */
 
-ini_set('display_errors', 1);
-
 require 'class.uw-servicenowclient.php';
+
+
+add_filter('pigen_filter_convert_imageMagick', 'uw_classrooms_pigen_filter_convert_imageMagick', 10, 3);
+function uw_classrooms_pigen_filter_convert_imageMagick($imageMagick, $old, $new)
+{
+  # trim extra whitespace around schematics
+  $imageMagick = "convert -quality 90 -background white -flatten -trim {$old} {$new}";
+  return $imageMagick;
+}
+
+
+add_filter('uw_campus_map_buildingcode', 'uw_classrooms_uw_campus_map_buildingcode');
+function uw_classrooms_uw_campus_map_buildingcode($buildingCode)
+{
+  global $post;
+
+  if ($code = get_location_meta($post->ID, 'u_fac_code'))
+    return $code;
+    
+  return $buildingCode;
+}
 
 
 add_action('init', 'uw_classrooms_init');
 function uw_classrooms_init()
 {
-  global $uw_snclient;
+  global $uw_snclient, $uw_classrooms_options;
+
+  $uw_classrooms_options = get_option('uw_classrooms_options');
 
   register_taxonomy('location-type', 'page', array(
 						   'label' => 'Location Type',
@@ -30,111 +51,185 @@ function uw_classrooms_init()
 							 ));
 
   $uw_snclient = new UW_ServiceNowClient(array(
-					       'base_url' => get_option('uw_SN_URL'),
-					       'username' => get_option('uw_SN_USER'),
-					       'password' => get_option('uw_SN_PASS'),
+					       'base_url' => $uw_classrooms_options['servicenow_url'],
+					       'username' => $uw_classrooms_options['servicenow_user'],
+					       'password' => $uw_classrooms_options['servicenow_pass'],
 					       ));
 
   wp_enqueue_style( 'uw-classrooms', plugins_url('uw-classrooms/style.css'));
+}
+
+
+function init_building_page($sn_building)
+{
+  $building_page = array(
+			 'comment_status' => 'open',
+			 'ping_status' =>  'closed',
+			 'post_name' => $sn_building['u_fac_code'],
+			 'post_status' => 'publish',
+			 'post_title' => $sn_building['u_long_name'],
+			 'post_type' => 'page',
+			 );
+
+  $id = wp_insert_post($building_page, false);
+
+  wp_set_object_terms($id, 'Building', 'location-type');
+  update_post_meta($id, 'uw-location-sys-id', $sn_building['sys_id']);
+  update_post_meta($id, 'uw-location-data', $sn_building);
+
+  $building_page = get_post($id);
+
+  return $building_page;
+}
+
+
+function init_room_page($sn_room)
+{
+  global $uw_snclient;
+
+  $pages = get_pages(array('meta_key' => 'uw-location-sys-id', 'meta_value' => $sn_room['parent']));
+  if (count($pages))
+    $building_page = $pages[0];
+
+  else {
+    $result = json_decode($uw_snclient->get('cmn_location', $sn_room['parent']), true);
+    $sn_building = $result['records'][0];
+
+    $building_page = init_building_page($sn_building);
+  }
+
+  $room_page = array(
+		     'comment_status' => 'open',
+		     'ping_status' =>  'closed',
+		     'post_name' => $sn_room['name'],
+		     'post_status' => 'publish',
+		     'post_title' => "{$building_page->post_title} {$sn_room['u_room_number']}", #$sn_room['u_long_name']
+		     'post_type' => 'page',
+		     'post_parent' => $building_page->ID,
+		     );
+
+  $id = wp_insert_post($room_page, false);
+
+  wp_set_object_terms($id, 'Classroom', 'location-type');
+  update_post_meta($id, 'uw-location-sys-id', $sn_room['sys_id']);
+  update_post_meta($id, 'uw-location-data', $sn_room);
+
+  return $room_page;
+}
+
+
+register_activation_hook(__FILE__, 'uw_classrooms_activate');
+function uw_classrooms_activate()
+{
+  global $uw_snclient;
+
+  uw_classrooms_init();
+
+  # init attribute hierarchy
+  foreach (array('Furnishings', 'Dimensions', 'Accessibility', 'Instructor Area', 'Student Seating') as $section)
+    if ( !term_exists($section, 'location-attributes') )
+      wp_insert_term($section, 'location-attributes');
+
+  foreach (get_pages() as $page)
+    wp_delete_post($page->ID, true);
+
+  $index_page = array(
+		     'comment_status' => 'open',
+		     'ping_status' =>  'closed',
+		     'post_name' => 'Classrooms',
+		     'post_status' => 'publish',
+		     'post_title' => 'Classrooms',
+		     'post_type' => 'page',
+		     );
+
+  $id = wp_insert_post($index_page, false);
+  update_option('show_on_front', 'page');
+  update_option('page_on_front', $id);
+
+  # init room pages
+  $result = json_decode($uw_snclient->get_records('cmn_location', "u_cte_managed_room=true"), true);
+  $sn_rooms = $result['records'];
+
+  foreach ($sn_rooms as $sn_room) {
+    $pages = get_pages(array('meta_key' => 'uw-location-sys-id', 'meta_value' => $sn_room['sys_id']));
+
+    if (!count($pages))
+      init_room_page($sn_room);
+  }
 
 }
 
 
-add_action('admin_menu', 'uw_classrooms_menu');
-function uw_classrooms_menu() {
-  add_options_page('UW Classrooms Options', 'UW Classrooms', 'manage_options', 'uw-classrooms-options', 'uw_classrooms_options' );
+add_action('admin_menu', 'uw_classrooms_admin_menu');
+function uw_classrooms_admin_menu()
+{
+  add_options_page('UW Classrooms Options', 'UW Classrooms', 'manage_options', __FILE__, 'uw_classrooms_options' );
 }
+function uw_classrooms_options()
+{
 
-
-function uw_classrooms_options() {
-  $hidden_field_name = 'uw_submit_hidden';
-
-  // variables for the field and option names
-  $url = 'uw_SN_URL';
-  $data_url = 'uw_SN_URL';
-  $user = 'uw_SN_USER';
-  $data_user = 'uw_SN_USER';
-  $pass = 'uw_SN_PASS';
-  $data_pass = 'uw_SN_PASS';
-
-  // Read in existing option value from database
-  $url_val = get_option( $url );
-  $user_val = get_option( $user );
-  $pass_val = get_option( $pass );
-
-  // See if the user has posted us some information
-  // If they did, this hidden field will be set to 'Y'
-  if( isset($_POST[ $hidden_field_name ]) && $_POST[ $hidden_field_name ] == 'Y' ) { 
-    // Read their posted value
-    $url_val = $_POST[ $data_url ];
-    $user_val = $_POST[ $data_user ];
-    $pass_val = $_POST[ $data_pass ];
-
-    // Save the posted value in the database
-    update_option( $url, $url_val );
-    update_option( $user, $user_val );
-    update_option( $pass, $pass_val );
-
-    flush_rewrite_rules();
 ?>
-      <div class="updated"><p><strong><?php _e('settings saved.', 'menu' ); ?></strong></p></div>
-<?php
-										  }
-  // Now display the settings editing screen
-  echo '<div class="wrap">';
-  // header
-  echo "<h2>" . __( 'UW Classrooms Plugin Settings', 'menu' ) . "</h2>";
-  // settings form
-  ?>
-
-<form name="form1" method="post" action="">
-<input type="hidden" name="<?php echo $hidden_field_name; ?>" value="Y">
-
-   <p><?php _e("ServiceNow URL:", 'menu' ); ?>
-<input type="text" name="<?php echo $data_url; ?>" value="<?php echo $url_val; ?>" size="20">
-</p><hr />
-
-   <p><?php _e("ServiceNow User:", 'menu' ); ?>
-<input type="text" name="<?php echo $data_user; ?>" value="<?php echo $user_val; ?>" size="20">
-</p><hr />
-
-   <p><?php _e("ServiceNow Pass:", 'menu' ); ?>
-<input type="password" name="<?php echo $data_pass; ?>" value="<?php echo $pass_val; ?>" size="20">
-
-</p><hr /><p class="submit">
-<input type="submit" name="Submit" class="button-primary" value="<?php esc_attr_e('Save Changes') ?>" />
-</p>
-
-</form>
+<div class="wrap">
+  <h2>UW Classrooms Settings</h2>
+  <form method="post" action="options.php">
+    <?php settings_fields( 'uw_classrooms_options' ); ?>
+    <?php do_settings_sections( __FILE__ ); ?>
+    <?php submit_button(); ?>
+  </form>
 </div>
 <?php
+
 }
 
 
-
-function get_location_sys_id()
+add_action( 'admin_init', 'uw_classrooms_admin_init' );
+function uw_classrooms_admin_init()
 {
-  global $post, $uw_snclient;
+  register_setting('uw_classrooms_options', 'uw_classrooms_options');
 
-  if ( $location_sys_id = get_post_meta($post->ID, 'uw-location-sys-id', true) )
-    return $location_sys_id;
+  add_settings_section('uw_classrooms_servicenow', 'UW Connect Settings', 'uw_classrooms_servicenow_settings', __FILE__);
+  add_settings_field('servicenow_url', 'URL', 'uw_classrooms_setting_text',
+		     __FILE__, 'uw_classrooms_servicenow',
+		     array('label_for' => 'servicenow_url'));
+  add_settings_field('servicenow_user', 'Username', 'uw_classrooms_setting_text',
+		     __FILE__, 'uw_classrooms_servicenow',
+		     array('label_for' => 'servicenow_user'));
+  add_settings_field('servicenow_pass', 'Password', 'uw_classrooms_setting_password',
+		     __FILE__, 'uw_classrooms_servicenow',
+		     array('label_for' => 'servicenow_pass'));
+}
+function uw_classrooms_servicenow_settings()
+{
+}
+function uw_classrooms_setting_text($args)
+{
+  global $uw_classrooms_options;
 
-  if ( !$building = get_post_meta($post->ID, 'uw-building-code', true) )
+?>
+<input type="text" name="uw_classrooms_options[<?= $args['label_for'] ?>]" value="<?= $uw_classrooms_options[$args['label_for']] ?>" />
+<?php
+
+}
+function uw_classrooms_setting_password($args)
+{
+  global $uw_classrooms_options;
+
+?>
+<input type="password" name="uw_classrooms_options[<?= $args['label_for'] ?>]" value="<?= $uw_classrooms_options[$args['label_for']] ?>" />
+<?php
+
+}
+
+
+function get_location_meta($id, $field)
+{
+  if ( ! ($data = get_post_meta($id, 'uw-location-data', true)) )
     return false;
 
-  if ( !$room = get_post_meta($post->ID, 'uw-room-number', true) )
+  if ( !isset($data[$field]) )
     return false;
 
-  $result = json_decode($uw_snclient->get_records('cmn_location', "parent.u_fac_code={$building}^u_room_number={$room}"), true);
-
-  if (count($result['records']) != 1)
-    return false;
-
-  $location_sys_id = $result['records'][0]['sys_id'];
-
-  add_post_meta($post->ID, 'uw-location-sys-id', $location_sys_id, true);
-
-  return $location_sys_id;
+  return $data[$field];
 }
 
 
@@ -145,7 +240,7 @@ function get_location_assets()
   if ( $location_assets = get_post_meta($post->ID, 'uw-location-assets', true) )
     return $location_assets;
 
-  if ( !$location_sys_id = get_location_sys_id())
+  if ( !$location_sys_id = get_post_meta($post->ID, 'uw-location-sys-id', true) )
     return false;
 
   $result = json_decode($uw_snclient->get_records('alm_hardware', "location={$location_sys_id}^install_status=1^u_publish=true"), true);
@@ -248,10 +343,10 @@ function get_location_asset_list()
 {
   global $post;
 
-  if ( !$building = get_post_meta($post->ID, 'uw-building-code', true) )
+  if ( !$building = get_location_meta($post->ID, 'u_fac_code') )
     return false;
 
-  if ( !$room = get_post_meta($post->ID, 'uw-room-number', true) )
+  if ( !$room = get_location_meta($post->ID, 'u_room_number') )
     return false;
 
   if ( !$location_assets = get_location_assets())
@@ -275,22 +370,18 @@ function get_location_asset_list()
 }
 
 
-function get_map_link()
+function get_location_attributes_list()
 {
   global $post;
 
-  if ( ! ($map_url = get_post_meta($post->ID, 'uw-map-url', true)) ) {
-
-    if ( !$building = get_post_meta($post->ID, 'uw-building-code', true) )
-      return false;
-
-    $map_url = 'http://uw.edu/maps/?' . strtolower($building);
-
-    add_post_meta($post->ID, 'uw-map-url', $map_url, true);
-
-  }
-
-  return '<h3 class="map-link"><a href="' . $map_url . '" target="_blank">Map Location*</a></h3>';
+  return
+    '<ul class="location-attributes">' .
+    wp_list_categories(array(
+			     'echo' => false,
+			     'taxonomy' => 'location-attributes',
+			     'title_li' => '',
+			     )) .
+    '</ul>';
 }
 
 
@@ -300,7 +391,7 @@ function get_access_link()
 
   if ( ! ($access_url = get_post_meta($post->ID, 'uw-access-url', true)) ) {
 
-    if ( !$building = get_post_meta($post->ID, 'uw-building-code', true) )
+    if ( !$building = get_location_meta($post->ID, 'u_fac_code') )
       return false;
 
     $url = 'http://assetmapper.fs.washington.edu/ada/uw.ada/buildlist.aspx';
@@ -352,10 +443,10 @@ function get_album_link()
 
   if ( !($album_url = get_post_meta($post->ID, 'uw-album-url', true)) ) {
 
-    if ( !$building = get_post_meta($post->ID, 'uw-building-code', true) )
+    if ( !$building = get_location_meta($post->ID, 'u_fac_code') )
       return false;
 
-    if ( !$room = get_post_meta($post->ID, 'uw-room-number', true) )
+    if ( !$room = get_location_meta($post->ID, 'u_room_number') )
       return false;
 
     $album_url = 'http://www.flickr.com/photos/52503205@N07/tags/' . $building . ' ' . $room;
@@ -402,11 +493,6 @@ function uw_classrooms_building_content($content)
   if ( !has_term('building', 'location-type') )
     return $content;
 
-  if ( !$building = get_post_meta($post->ID, 'uw-building-code', true) )
-      return $content;
-
-  $content .= get_map_link();
-
   $content .= get_access_link();
 
   $room_list = get_pages(array('child_of' => $post->ID));
@@ -423,7 +509,7 @@ function uw_classrooms_building_content($content)
         </tr>';
 
   foreach ( $room_list as $page ) {
-    $room_number = get_post_meta($page->ID, 'uw-room-number', true);
+    $room_number = get_location_meta($page->ID, 'u_room_number');
     $room_capacity = get_post_meta($page->ID, 'uw-room-capacity', true);
     $room_type = get_the_term_list($page->ID, 'location-type', '', ', ');
     $room_floor = substr($room_number, 0, 1);
@@ -481,10 +567,10 @@ function uw_classrooms_room_content($content)
   if ( !has_term('classroom', 'location-type') )
     return $content;
 
-  if ( !$building = get_post_meta($post->ID, 'uw-building-code', true) )
+  if ( !$building = get_location_meta($post->ID, 'u_fac_code') )
       return $content;
 
-  if ( !$room = get_post_meta($post->ID, 'uw-room-number', true) )
+  if ( !$room = get_location_meta($post->ID, 'u_room_number') )
       return $content;
 
   $content .= get_album_link();
@@ -494,6 +580,8 @@ function uw_classrooms_room_content($content)
   $content .= get_schematic_link();
 
   $content .= get_location_asset_list();
+
+  $content .= get_location_attributes_list();
 
   $content .= '<p><a href="http://www.cte.uw.edu/pdf/electkey.pdf">Key for electrical symbols</a></p>';
 
@@ -516,23 +604,33 @@ function get_page_by_name($pagename)
 }
 
 
-register_activation_hook(__FILE__, 'update_classrooms');
-function update_classrooms() {
 
-  uw_classrooms_init();
 
-  $buildings_import = json_decode(file_get_contents("http://www.cte.uw.edu/buildings?json"), true);
 
-  foreach ($buildings_import as $code => $building) {
+function import_classrooms()
+{
 
-    $building_import = json_decode(file_get_contents("http://www.cte.uw.edu/building/$code?json"), true);
+  $path = plugin_dir_path(__FILE__);
+
+#  $buildings_import = json_decode(file_get_contents("http://www.cte.uw.edu/buildings?json"), true);
+#  foreach ($buildings_import as $code => $b) { $buildings_import[$code] = $b['building_name']; }
+#  file_put_contents("{$path}initialdata/buildings.php", var_export($buildings_import, true));
+
+  eval('$buildings_import = ' . file_get_contents("{$path}initialdata/buildings.php") . ';');
+
+  foreach ($buildings_import as $code => $building_name) {
+
+#    $building_import = json_decode(file_get_contents("http://www.cte.uw.edu/building/$code?json"), true);
+#    file_put_contents("{$path}initialdata/{$code}.php", var_export($building_import, true));
+
+    eval('$building_import = ' . file_get_contents("{$path}initialdata/{$code}.php") . ';');
 
     $post = array(
 		  'comment_status' => 'open',
 		  'ping_status' =>  'closed',
 		  'post_name' => $code,
 		  'post_status' => 'publish',
-		  'post_title' => $building['building_name'],
+		  'post_title' => $building_name,
 		  'post_type' => 'page',
 		  'post_content' => '',
 		  );
@@ -555,9 +653,12 @@ function update_classrooms() {
 
     foreach ($building_import['room_list'] as $codenum => $room) {
 
-#      $room_import = json_decode(file_get_contents("http://www.cte.uw.edu/room/$codenum?json"), true);
+#      $room_import = json_decode(file_get_contents("http://www.cte.uw.edu/room/" . urlencode($codenum) . "?json"), true);
+#      file_put_contents("{$path}initialdata/{$codenum}.php", var_export($room_import, true));
 
-      $roomname = "{$building['building_name']} {$room['room_number']}";
+      eval('$room_import = ' . file_get_contents("{$path}initialdata/{$codenum}.php") . ';');
+
+      $roomname = "{$building_name} {$room['room_number']}";
       if ($room['room_name'])
 	$roomname .= " ({$room['room_name']})";
 
@@ -597,6 +698,27 @@ function update_classrooms() {
       update_post_meta($room_id, 'uw-room-number', $room['room_number']);
       update_post_meta($room_id, 'uw-room-name', $room['room_name']);
       update_post_meta($room_id, 'uw-room-capacity', $room['room_capacity']);
+
+      wp_set_object_terms($room_id, NULL, 'location-attributes');
+      foreach ($room_import['attribute_list'] as $section => $attributes) {
+	$section = trim($section);
+	echo "section: $section\n";
+	if ( !array_key_exists($section, $attr_sections) )
+	  continue;
+	wp_set_object_terms($room_id, intval($attr_sections[$section]['term_id']), 'location-attributes', true);
+	foreach ($attributes as $attribute => $properties) {
+	  $attribute = trim($attribute);
+	  echo " $attribute\n";
+	  if ( empty($attribute) )
+	    continue;
+	  if ( $attr = term_exists($attribute, 'location-attributes') )
+	    wp_update_term($attr['term_id'], 'location-attributes', array('parent' => $attr_sections[$section]['term_id']));
+	  else
+	    if ( is_wp_error( $attr = wp_insert_term($attribute, 'location-attributes', array('parent' => $attr_sections[$section]['term_id'])) ) )
+	      die(__FILE__.":".__LINE__.' '.$attr->get_error_message());
+	  wp_set_object_terms($room_id, intval($attr['term_id']), 'location-attributes', true);
+	}
+      }
 
     }
 
