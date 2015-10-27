@@ -591,7 +591,7 @@ function uw_classrooms_room_content($content)
 
   $content .= get_location_attributes_list();
 
-  $content .= file_get_contents("http://www.cte.uw.edu/room/$building+$room");
+#  $content .= file_get_contents("http://www.cte.uw.edu/room/$building+$room");
 
   return $content;
 }
