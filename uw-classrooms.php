@@ -487,7 +487,7 @@ function get_schematic_link()
 
   foreach ($pdfs as $pdf) {
     if (stristr($pdf->post_name, 'schematic')) {
-      return '<div class="schematic-link">' . wp_get_attachment_link($pdf->ID, 'medium') . '</div>';
+      return '<div class="schematic-link">' . wp_get_attachment_link($pdf->ID, array(320, 480)) . '</div>';
     }
   }
 }
