@@ -82,6 +82,7 @@ function init_building_page($sn_building)
 			 'post_status' => 'publish',
 			 'post_title' => $sn_building['u_long_name'],
 			 'post_type' => 'page',
+			 'post_content' => "[classrooms]\n\n* - External links are not maintained by CTE and the URLs may change or stop working without notice.\n",
 			 );
 
   $id = wp_insert_post($building_page, false);
@@ -552,8 +553,8 @@ function get_schematic_link()
 }
 
 
-add_filter('the_content', 'uw_classrooms_building_content');
-function uw_classrooms_building_content($content)
+add_shortcode('classrooms', 'uw_classrooms_building_content');
+function uw_classrooms_building_content()
 {
   global $post;
 
@@ -618,9 +619,7 @@ function uw_classrooms_building_content($content)
   }
 
   $content .= '
-      </table>
-      <br />
-      <p><a name="external link">*</a> - External links are not maintained by CTE and the URLs may change or stop working without notice.</p>';
+      </table>';
 
   return $content;
 }
