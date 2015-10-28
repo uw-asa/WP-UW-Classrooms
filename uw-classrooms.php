@@ -81,9 +81,7 @@ function init_building_page($sn_building)
   update_post_meta($id, 'uw-location-sys-id', $sn_building['sys_id']);
   update_post_meta($id, 'uw-location-data', $sn_building);
 
-  $building_page = get_post($id);
-
-  return $building_page;
+  return get_post($id);
 }
 
 
@@ -91,7 +89,7 @@ function init_room_page($sn_room)
 {
   global $uw_snclient;
 
-  $pages = get_pages(array('meta_key' => 'uw-location-sys-id', 'meta_value' => $sn_room['parent']));
+  $pages = get_pages(array('meta_key' => 'uw-location-sys-id', 'meta_value' => $sn_room['parent'], 'hierarchical' => false));
   if (count($pages))
     $building_page = $pages[0];
 
@@ -107,7 +105,7 @@ function init_room_page($sn_room)
 		     'ping_status' =>  'closed',
 		     'post_name' => $sn_room['name'],
 		     'post_status' => 'publish',
-		     'post_title' => "{$building_page->post_title} {$sn_room['u_room_number']}", #$sn_room['u_long_name']
+		     'post_title' => "{$building_page->post_title} {$sn_room['u_room_number']}",
 		     'post_type' => 'page',
 		     'post_parent' => $building_page->ID,
 		     'post_content' => "[photoalbum]\n\n[instructions]\n\n[assets]\n\n[attributes]\n",
@@ -119,7 +117,7 @@ function init_room_page($sn_room)
   update_post_meta($id, 'uw-location-sys-id', $sn_room['sys_id']);
   update_post_meta($id, 'uw-location-data', $sn_room);
 
-  return $room_page;
+  return get_post($id);
 }
 
 
@@ -130,37 +128,72 @@ function uw_classrooms_activate()
 
   uw_classrooms_init();
 
+  # init location hierarchy
+  if ( !($term = term_exists('Building', 'location-type')) )
+    $term = wp_insert_term('Building', 'location-type');
+  $building_term_id = intval($term['term_id']);
+
+  if ( !($term = term_exists('Classroom', 'location-type')) )
+    $term = wp_insert_term('Classroom', 'location-type');
+  $classroom_term_id = intval($term['term_id']);
+
+  foreach (array('Auditorium', 'Breakout Room', 'Case Study Classroom', 'Computer Classroom', 'Seminar Room') as $type)
+    if ( !term_exists($type, 'location-type', $classroom_term_id) )
+      wp_insert_term($type, 'location-type', array('parent' => $classroom_term_id));
+
   # init attribute hierarchy
   foreach (array('Furnishings', 'Dimensions', 'Accessibility', 'Instructor Area', 'Student Seating') as $section)
     if ( !term_exists($section, 'location-attributes') )
       wp_insert_term($section, 'location-attributes');
 
-  foreach (get_pages() as $page)
-    wp_delete_post($page->ID, true);
+  # init front page
+  foreach (get_pages(array('hierarchical' => false)) as $page)
+    if ($page->post_name == 'classrooms')
+      $front_page_id = $page->ID;
 
-  $index_page = array(
-		     'comment_status' => 'open',
-		     'ping_status' =>  'closed',
-		     'post_name' => 'Classrooms',
-		     'post_status' => 'publish',
-		     'post_title' => 'Classrooms',
-		     'post_type' => 'page',
-		     );
+  if (!$front_page_id) {
+    $page = array(
+		  'comment_status' => 'open',
+		  'ping_status' =>  'closed',
+		  'post_name' => 'Classrooms',
+		  'post_status' => 'publish',
+		  'post_title' => 'Classrooms',
+		  'post_type' => 'page',
+		  );
 
-  $id = wp_insert_post($index_page, false);
+    $front_page_id = wp_insert_post($page, false);
+  }
   update_option('show_on_front', 'page');
-  update_option('page_on_front', $id);
+  update_option('page_on_front', $front_page_id);
 
   # init room pages
   $result = json_decode($uw_snclient->get_records('cmn_location', "u_cte_managed_room=true"), true);
   $sn_rooms = $result['records'];
 
   foreach ($sn_rooms as $sn_room) {
-    $pages = get_pages(array('meta_key' => 'uw-location-sys-id', 'meta_value' => $sn_room['sys_id']));
+    $pages = get_pages(array('meta_key' => 'uw-location-sys-id', 'meta_value' => $sn_room['sys_id'], 'hierarchical' => false));
 
     if (!count($pages))
       init_room_page($sn_room);
   }
+
+  $widget_conditions_main = array('action' => 'show',
+				  'rules' => array(0 => array('major' => 'page', 'minor' => 'front'),
+						   1 => array('major' => 'page', 'minor' => 'post_type-post')));
+  $widget_conditions_building = array('action' => 'show',
+				      'rules' => array(0 => array('major' => 'taxonomy',
+								  'minor' => 'location-type_tax_' . $term_building['term_id'])));
+  $widget_conditions_classroom = array('action' => 'show',
+				      'rules' => array(0 => array('major' => 'taxonomy',
+								  'minor' => 'location-type_tax_' . $term_classroom['term_id'])));
+  # init widgets
+  update_option( 'widget_uw-recent', array(2 => array('title' => 'Recent Posts', 'items' => 5, 'more' => false, 'conditions' => $widget_conditions_main), '_multiwidget' => 1) );
+  update_option( 'widget_archives', array(2 => array('title' => '', 'count' => 0, 'dropdown' => 0, 'conditions' => $widget_conditions_main), '_multiwidget' => 1) );
+  update_option( 'widget_categories', array(2 => array('title' => '', 'count' => 0, 'hierarchical' => 0, 'dropdown' => 0, 'conditions' => $widget_conditions_main), '_multiwidget' => 1) );
+  update_option( 'widget_uw-campus-map', array ( 2 => array ( 'title' => 'Map', 'text' => '[buildingcode]', 'count' => 0, 'hierarchical' => 0, 'dropdown' => 0, 'conditions' => $widget_conditions_building), '_multiwidget' => 1) );
+  update_option( 'widget_text', array(2 => array('title' => '', 'text' => "[accessibility]", 'filter' => false, 'conditions' => $widget_conditions_building),
+				      3 => array('title' => 'Schematic', 'text' => "[schematic]\n\n<p><a href=\"http://www.cte.uw.edu/pdf/electkey.pdf\">Key for electrical symbols</a></p>", 'filter' => false, 'conditions' => $widget_conditions_classroom), '_multiwidget' => 1) );
+  update_option( 'sidebars_widgets', array('wp_inactive_widgets' => array(), 'sidebar' => array ( 0 => 'uw-recent-2', 1 => 'archives-2', 2 => 'categories-2', 3 => 'uw-campus-map-2', 4 => 'text-2', 5 => 'text-3'), 'array_version' => 3) );
 
 }
 
