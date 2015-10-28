@@ -587,6 +587,7 @@ function uw_classrooms_building_content()
           <th>Capacity </th>';
   $content .= '
           <th>Room Type </th>
+          <th> </th>
         </tr>';
 
   foreach ( $room_list as $page ) {
