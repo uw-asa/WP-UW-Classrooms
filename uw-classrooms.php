@@ -95,7 +95,7 @@ function init_building_page($sn_building)
 }
 
 
-function init_room_page($sn_room)
+function init_room_page($sn_room, $existing_page = null)
 {
   global $uw_snclient;
 
@@ -120,6 +120,9 @@ function init_room_page($sn_room)
 		     'post_parent' => $building_page->ID,
 		     'post_content' => "[photoalbum]\n\n[instructions]\n\n[assets]\n\n[attributes]\n",
 		     );
+
+  if ($existing_page)
+    $room_page['ID'] = $existing_page->ID;
 
   $id = wp_insert_post($room_page, false);
 
@@ -198,9 +201,7 @@ function uw_classrooms_activate()
 
   foreach ($sn_rooms as $sn_room) {
     $pages = get_pages(array('meta_key' => 'uw-location-sys-id', 'meta_value' => $sn_room['sys_id'], 'hierarchical' => false));
-
-    if (!count($pages))
-      init_room_page($sn_room);
+    init_room_page($sn_room, count($pages) ? $pages[0] : null);
   }
 
   $widget_conditions_main = array('action' => 'show',
