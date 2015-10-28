@@ -146,10 +146,12 @@ function uw_classrooms_activate()
     if ( !term_exists($section, 'location-attributes') )
       wp_insert_term($section, 'location-attributes');
 
-  # init front page
+  # init front and home pages
   foreach (get_pages(array('hierarchical' => false)) as $page)
     if ($page->post_name == 'classrooms')
       $front_page_id = $page->ID;
+    elseif ($page->post_name == 'updates')
+      $home_page_id = $page->ID;
 
   if (!$front_page_id) {
     $page = array(
@@ -165,6 +167,20 @@ function uw_classrooms_activate()
   }
   update_option('show_on_front', 'page');
   update_option('page_on_front', $front_page_id);
+
+  if (!$home_page_id) {
+    $page = array(
+		  'comment_status' => 'open',
+		  'ping_status' =>  'closed',
+		  'post_name' => 'Updates',
+		  'post_status' => 'publish',
+		  'post_title' => 'Updates',
+		  'post_type' => 'page',
+		  );
+
+    $home_page_id = wp_insert_post($page, false);
+  }
+  update_option('page_for_posts', $home_page_id);
 
   # init room pages
   $result = json_decode($uw_snclient->get_records('cmn_location', "u_cte_managed_room=true"), true);
@@ -187,7 +203,7 @@ function uw_classrooms_activate()
 				      'rules' => array(0 => array('major' => 'taxonomy',
 								  'minor' => 'location-type_tax_' . $term_classroom['term_id'])));
   # init widgets
-  update_option( 'widget_uw-recent', array(2 => array('title' => 'Recent Posts', 'items' => 5, 'more' => false, 'conditions' => $widget_conditions_main), '_multiwidget' => 1) );
+  update_option( 'widget_uw-recent', array(2 => array('title' => 'Updates', 'items' => 5, 'more' => false, 'conditions' => $widget_conditions_main), '_multiwidget' => 1) );
   update_option( 'widget_archives', array(2 => array('title' => '', 'count' => 0, 'dropdown' => 0, 'conditions' => $widget_conditions_main), '_multiwidget' => 1) );
   update_option( 'widget_categories', array(2 => array('title' => '', 'count' => 0, 'hierarchical' => 0, 'dropdown' => 0, 'conditions' => $widget_conditions_main), '_multiwidget' => 1) );
   update_option( 'widget_uw-campus-map', array ( 2 => array ( 'title' => 'Map', 'text' => '[buildingcode]', 'count' => 0, 'hierarchical' => 0, 'dropdown' => 0, 'conditions' => $widget_conditions_building), '_multiwidget' => 1) );
