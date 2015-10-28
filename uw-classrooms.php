@@ -75,6 +75,11 @@ function uw_classrooms_init()
 
 function init_building_page($sn_building)
 {
+  $existing_page = null;
+  $pages = get_pages(array('meta_key' => 'uw-location-sys-id', 'meta_value' => $sn_building['sys_id'], 'hierarchical' => false));
+  if (count($pages))
+    $existing_page = $pages[0];
+
   $building_page = array(
 			 'comment_status' => 'open',
 			 'ping_status' =>  'closed',
@@ -84,6 +89,9 @@ function init_building_page($sn_building)
 			 'post_type' => 'page',
 			 'post_content' => "[classrooms]\n\n* - External links are not maintained by CTE and the URLs may change or stop working without notice.\n",
 			 );
+
+  if ($existing_page)
+    $building_page['ID'] = $existing_page->ID;
 
   $id = wp_insert_post($building_page, false);
 
@@ -95,20 +103,15 @@ function init_building_page($sn_building)
 }
 
 
-function init_room_page($sn_room, $existing_page = null)
+function init_room_page($sn_room)
 {
-  global $uw_snclient;
+  $existing_page = null;
+  $pages = get_pages(array('meta_key' => 'uw-location-sys-id', 'meta_value' => $sn_room['sys_id'], 'hierarchical' => false));
+  if (count($pages))
+    $existing_page = $pages[0];
 
   $pages = get_pages(array('meta_key' => 'uw-location-sys-id', 'meta_value' => $sn_room['parent'], 'hierarchical' => false));
-  if (count($pages))
-    $building_page = $pages[0];
-
-  else {
-    $result = json_decode($uw_snclient->get('cmn_location', $sn_room['parent']), true);
-    $sn_building = $result['records'][0];
-
-    $building_page = init_building_page($sn_building);
-  }
+  $building_page = $pages[0];
 
   $room_page = array(
 		     'comment_status' => 'open',
@@ -195,14 +198,23 @@ function uw_classrooms_activate()
   }
   update_option('page_for_posts', $home_page_id);
 
-  # init room pages
+  # init building and room pages
   $result = json_decode($uw_snclient->get_records('cmn_location', "u_cte_managed_room=true"), true);
   $sn_rooms = $result['records'];
 
-  foreach ($sn_rooms as $sn_room) {
-    $pages = get_pages(array('meta_key' => 'uw-location-sys-id', 'meta_value' => $sn_room['sys_id'], 'hierarchical' => false));
-    init_room_page($sn_room, count($pages) ? $pages[0] : null);
+  $buildings = array();
+  foreach ($sn_rooms as $sn_room)
+    $buildings[$sn_room['parent']] = $sn_room['parent'];
+
+  foreach ($buildings as $sys_id) {
+    $result = json_decode($uw_snclient->get('cmn_location', $sys_id), true);
+    $sn_building = $result['records'][0];
+    
+    init_building_page($sn_building);
   }
+
+  foreach ($sn_rooms as $sn_room)
+    init_room_page($sn_room);
 
   $widget_conditions_main = array('action' => 'show',
 				  'rules' => array(0 => array('major' => 'page', 'minor' => 'front'),
