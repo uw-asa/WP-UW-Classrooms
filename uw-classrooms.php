@@ -23,12 +23,21 @@ function uw_classrooms_pigen_filter_convert_imageMagick($imageMagick, $old, $new
 
 add_filter('uw_campus_map_buildingcode', 'do_shortcode');
 
-add_shortcode('buildingcode', 'get_location_buildingcode');
-function get_location_buildingcode()
+add_shortcode('location', 'location_handler');
+function location_handler($atts)
 {
-  global $post;
+  $atts = shortcode_atts(array('field' => null), $atts);
 
-  return get_location_meta($post->ID, 'u_fac_code');
+  if ( !$atts['field'] )
+    return '';
+
+  if ( !($data = get_post_meta(get_the_ID(), 'uw-location-data', true)) )
+    return '';
+
+  if ( !isset($data[$atts['field']]) )
+    return '';
+
+  return $data[$atts['field']];
 }
 
 
@@ -198,15 +207,15 @@ function uw_classrooms_activate()
 						   1 => array('major' => 'page', 'minor' => 'post_type-post')));
   $widget_conditions_building = array('action' => 'show',
 				      'rules' => array(0 => array('major' => 'taxonomy',
-								  'minor' => 'location-type_tax_' . $term_building['term_id'])));
+								  'minor' => 'location-type_tax_' . $building_term_id)));
   $widget_conditions_classroom = array('action' => 'show',
 				      'rules' => array(0 => array('major' => 'taxonomy',
-								  'minor' => 'location-type_tax_' . $term_classroom['term_id'])));
+								  'minor' => 'location-type_tax_' . $classroom_term_id)));
   # init widgets
   update_option( 'widget_uw-recent', array(2 => array('title' => 'Updates', 'items' => 5, 'more' => false, 'conditions' => $widget_conditions_main), '_multiwidget' => 1) );
   update_option( 'widget_archives', array(2 => array('title' => '', 'count' => 0, 'dropdown' => 0, 'conditions' => $widget_conditions_main), '_multiwidget' => 1) );
   update_option( 'widget_categories', array(2 => array('title' => '', 'count' => 0, 'hierarchical' => 0, 'dropdown' => 0, 'conditions' => $widget_conditions_main), '_multiwidget' => 1) );
-  update_option( 'widget_uw-campus-map', array ( 2 => array ( 'title' => 'Map', 'text' => '[buildingcode]', 'count' => 0, 'hierarchical' => 0, 'dropdown' => 0, 'conditions' => $widget_conditions_building), '_multiwidget' => 1) );
+  update_option( 'widget_uw-campus-map', array ( 2 => array ( 'title' => 'Map', 'buildingCode' => '[location field=u_fac_code]', 'hierarchical' => 0, 'dropdown' => 0, 'conditions' => $widget_conditions_building), '_multiwidget' => 1) );
   update_option( 'widget_text', array(2 => array('title' => '', 'text' => "[accessibility]", 'filter' => false, 'conditions' => $widget_conditions_building),
 				      3 => array('title' => 'Schematic', 'text' => "[schematic]\n\n<p><a href=\"http://www.cte.uw.edu/pdf/electkey.pdf\">Key for electrical symbols</a></p>", 'filter' => false, 'conditions' => $widget_conditions_classroom), '_multiwidget' => 1) );
   update_option( 'sidebars_widgets', array('wp_inactive_widgets' => array(), 'sidebar' => array ( 0 => 'uw-recent-2', 1 => 'archives-2', 2 => 'categories-2', 3 => 'uw-campus-map-2', 4 => 'text-2', 5 => 'text-3'), 'array_version' => 3) );
