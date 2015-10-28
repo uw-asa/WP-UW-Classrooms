@@ -67,3 +67,8 @@ The schematic being any PDF attached as a child of this page containing the word
 Display a formatted list of classrooms.
 e.g. the child pages of a building page
 
+
+## Dependencies
+[The UW WordPress theme](https://github.com/uweb/uw-2014)
+
+[PDF Image Generator](https://wordpress.org/plugins/pdf-image-generator/)
