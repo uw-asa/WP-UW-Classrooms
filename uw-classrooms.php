@@ -177,6 +177,7 @@ function uw_classrooms_activate()
 		  'post_status' => 'publish',
 		  'post_title' => 'Classrooms',
 		  'post_type' => 'page',
+		  'post_content' => "[buildings]\n",
 		  );
 
     $front_page_id = wp_insert_post($page, false);
@@ -563,6 +564,28 @@ function get_schematic_link()
       return '<div class="schematic-link">' . wp_get_attachment_link($pdf->ID, array(320, 480)) . '</div>';
     }
   }
+}
+
+
+add_shortcode('buildings', 'buildings_handler');
+function buildings_handler()
+{
+  $building_list = get_posts(array(
+				   'post_type' => 'page',
+				   'numberposts' => -1,
+				   'orderby' => 'post_title',
+				   'tax_query' => array(
+							array(
+							      'taxonomy' => 'location-type',
+							      'field' => 'slug',
+							      'terms' => 'building',
+							      'include_children' => false,
+							      )
+							)
+				   ));
+
+  wp_list_pages(array('include' => array_map(function($page) { return $page->ID; }, $building_list),
+		      'title_li' => 'Buildings'));
 }
 
 

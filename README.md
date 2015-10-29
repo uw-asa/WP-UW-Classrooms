@@ -63,6 +63,10 @@ The instructions being any PDF attached as a child of this page containing the w
 Display the schematic for this page.
 The schematic being any PDF attached as a child of this page containing the word "schematic"
 
+### [buildings]
+Display a formatted list of buildings.
+e.g. the pages with __location_type__ "Building"
+
 ### [classrooms]
 Display a formatted list of classrooms.
 e.g. the child pages of a building page
