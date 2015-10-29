@@ -163,40 +163,41 @@ function uw_classrooms_activate()
       wp_insert_term($section, 'location-attributes');
 
   # init front and home pages
-  foreach (get_pages(array('hierarchical' => false)) as $page)
+  foreach (get_pages(array('hierarchical' => false)) as $page) {
     if ($page->post_name == 'classrooms')
       $front_page_id = $page->ID;
     elseif ($page->post_name == 'updates')
       $home_page_id = $page->ID;
-
-  if (!$front_page_id) {
-    $page = array(
-		  'comment_status' => 'open',
-		  'ping_status' =>  'closed',
-		  'post_name' => 'Classrooms',
-		  'post_status' => 'publish',
-		  'post_title' => 'Classrooms',
-		  'post_type' => 'page',
-		  'post_content' => "[buildings]\n",
-		  );
-
-    $front_page_id = wp_insert_post($page, false);
   }
+
+  $page = array(
+		'comment_status' => 'open',
+		'ping_status' =>  'closed',
+		'post_name' => 'Classrooms',
+		'post_status' => 'publish',
+		'post_title' => 'Classrooms',
+		'post_type' => 'page',
+		'post_content' => "[buildings]\n",
+		);
+  if ($front_page_id)
+    $page['ID'] = $front_page_id;
+
+  $front_page_id = wp_insert_post($page, false);
   update_option('show_on_front', 'page');
   update_option('page_on_front', $front_page_id);
 
-  if (!$home_page_id) {
-    $page = array(
-		  'comment_status' => 'open',
-		  'ping_status' =>  'closed',
-		  'post_name' => 'Updates',
-		  'post_status' => 'publish',
-		  'post_title' => 'Updates',
-		  'post_type' => 'page',
-		  );
+  $page = array(
+		'comment_status' => 'open',
+		'ping_status' =>  'closed',
+		'post_name' => 'Updates',
+		'post_status' => 'publish',
+		'post_title' => 'Updates',
+		'post_type' => 'page',
+		);
+  if ($home_page_id)
+    $page['ID'] = $home_page_id;
 
-    $home_page_id = wp_insert_post($page, false);
-  }
+  $home_page_id = wp_insert_post($page, false);
   update_option('page_for_posts', $home_page_id);
 
   # init building and room pages
