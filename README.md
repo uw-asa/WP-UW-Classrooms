@@ -9,6 +9,10 @@ Each building and classroom is a WordPress "page" with special metadata and taxo
 
 'Building', 'Classroom', etc
 
+### document-type
+
+'Instructions' or 'Schematic'
+
 ### location-attributes
 
 
@@ -57,11 +61,11 @@ Display a link to __uw-album-url__
 
 ### [instructions]
 Display a link to the instructions for this page.
-The instructions being any PDF attached as a child of this page containing the word "instructions"
+The instructions being any attachment of this page with __document-type__ "Instructions"
 
 ### [schematic]
 Display the schematic for this page.
-The schematic being any PDF attached as a child of this page containing the word "schematic"
+The schematic being any attachment of this page with __document_type__ "Schematic"
 
 ### [buildings]
 Display a formatted list of buildings.

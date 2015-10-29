@@ -58,6 +58,11 @@ function uw_classrooms_init()
 						   'hierarchical' => true,
 						   ));
 
+  register_taxonomy('document-type', 'attachment', array(
+							 'label' => 'Document Types',
+							 'hierarchical' => false,
+							 ));
+
   register_taxonomy('location-attributes', 'page', array(
 							 'label' => 'Attributes',
 							 'hierarchical' => true,
@@ -161,6 +166,11 @@ function uw_classrooms_activate()
   foreach (array('Furnishings', 'Dimensions', 'Accessibility', 'Instructor Area', 'Student Seating') as $section)
     if ( !term_exists($section, 'location-attributes') )
       wp_insert_term($section, 'location-attributes');
+
+  # init document types
+  foreach (array('Instructions', 'Schematic') as $type)
+    if ( !term_exists($type, 'document-type') )
+      wp_insert_term($type, 'document-type');
 
   # init front and home pages
   foreach (get_pages(array('hierarchical' => false)) as $page) {
@@ -542,29 +552,44 @@ function get_album_link()
 }
 
 
+function get_attached_document($document_type)
+{
+  $posts = get_posts(array(
+			   'post_type' => 'attachment',
+			   'post_parent' => get_the_ID(),
+			   'numberposts' => 1,
+			   'tax_query' => array(array(
+						      'taxonomy' => 'document-type',
+						      'field' => 'slug',
+						      'terms' => $document_type,
+						      'include_children' => false,
+						      ))
+			   ));
+
+  if (!count($posts))
+    return false;
+
+  return $posts[0];
+}
+
+
 add_shortcode('instructions', 'get_instructions_link');
 function get_instructions_link()
 {
-  $pdfs = get_attached_media('application/pdf');
-
-  foreach ($pdfs as $pdf) {
-    if (stristr($pdf->post_name, 'instructions')) {
-      return '<h3 class="instructions-link">' . wp_get_attachment_link($pdf->ID, null, false, false, 'Room Instructions') . '</h3>';
-    }
-  }
+  if ( ($instructions = get_attached_document('instructions')) )
+    return '<h3 class="instructions-link">' .
+      wp_get_attachment_link($instructions->ID, null, false, false, 'Room Instructions') .
+      '</h3>';
 }
 
 
 add_shortcode('schematic', 'get_schematic_link');
 function get_schematic_link()
 {
-  $pdfs = get_attached_media('application/pdf');
-
-  foreach ($pdfs as $pdf) {
-    if (stristr($pdf->post_name, 'schematic')) {
-      return '<div class="schematic-link">' . wp_get_attachment_link($pdf->ID, array(320, 480)) . '</div>';
-    }
-  }
+  if ( ($schematic = get_attached_document('schematic')) )
+    return '<div class="schematic-link">' .
+      wp_get_attachment_link($schematic->ID, array(320, 480)) .
+      '</div>';
 }
 
 
