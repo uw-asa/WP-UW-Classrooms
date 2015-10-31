@@ -163,7 +163,7 @@ function uw_classrooms_activate()
       wp_insert_term($type, 'location-type', array('parent' => $classroom_term_id));
 
   # init attribute hierarchy
-  foreach (array('Furnishings', 'Dimensions', 'Accessibility', 'Instructor Area', 'Student Seating') as $section)
+  foreach (array('Features', 'Furnishings', 'Dimensions', 'Accessibility', 'Instructor Area', 'Student Seating') as $section)
     if ( !term_exists($section, 'location-attributes') )
       wp_insert_term($section, 'location-attributes');
 
@@ -460,10 +460,42 @@ function get_location_asset_list()
 }
 
 
+function init_location_features($post = null)
+{
+  if ( !$location_assets = get_location_assets())
+    return false;
+
+  if ( !($post instanceof WP_Post) )
+    $post = get_post($post);
+
+  if ( !($term = term_exists('Features', 'location-attributes')) )
+    $term = wp_insert_term('Features', 'location-attributes');
+  $features_term_id = intval($term['term_id']);
+  wp_set_object_terms($post->ID, 'Features', 'location-attributes', true);
+
+  foreach ($location_assets as $category => $features) {
+    if ( !($term = term_exists($category, 'location-attributes')) )
+      $term = wp_insert_term($category, 'location-attributes', array('parent' => $features_term_id));
+    $category_term_id = intval($term['term_id']);
+    wp_set_object_terms($post->ID, $category, 'location-attributes', true);
+
+    foreach ($features as $feature => $attributes) {
+      if ( !(term_exists($feature, 'location-attributes')) )
+	wp_insert_term($feature, 'location-attributes', array('parent' => $category_term_id));
+      wp_set_object_terms($post->ID, $feature, 'location-attributes', true);
+    }
+  }
+}
+
+
 add_shortcode('attributes', 'get_location_attributes_list');
 function get_location_attributes_list()
 {
   global $post;
+
+  init_location_features();
+
+  $post_terms = wp_get_object_terms( $post->ID, 'location-attributes', array( 'fields' => 'ids' ) );
 
   return
     '<ul class="location-attributes">' .
@@ -471,6 +503,7 @@ function get_location_attributes_list()
 			     'echo' => false,
 			     'taxonomy' => 'location-attributes',
 			     'title_li' => '',
+			     'include' => $post_terms,
 			     )) .
     '</ul>';
 }
