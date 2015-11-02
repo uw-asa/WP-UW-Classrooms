@@ -460,10 +460,50 @@ function get_location_asset_list()
 }
 
 
+function get_location_attributes()
+{
+  global $post;
+
+  $codenum = get_location_meta($post->ID, 'name');
+
+  $room_import = json_decode(file_get_contents("http://www.cte.uw.edu/room/" . urlencode($codenum) . "?json"), true);
+
+  wp_set_object_terms($post->ID, NULL, 'location-attributes');
+
+  foreach ($room_import['attribute_list'] as $section => $attributes) {
+    $section = trim($section);
+
+    if ( !($term = term_exists($section, 'location-attributes') ) )
+      continue;
+
+    $section_id = intval($term['term_id']);
+
+    wp_set_object_terms($post->ID, $section_id, 'location-attributes', true);
+    foreach ($attributes as $attribute => $properties) {
+      $attribute = trim($attribute);
+      if (empty($attribute))
+        continue;
+      if ($attr = term_exists($attribute, 'location-attributes'))
+        wp_update_term($attr['term_id'], 'location-attributes', array('parent' => $section_id));
+      else
+        if (is_wp_error($attr = wp_insert_term($attribute,
+          'location-attributes', array('parent' => $section_id))))
+          die(__FILE__ . ":" . __LINE__ . ' ' . $attr->get_error_message());
+      wp_set_object_terms($post->ID, intval($attr['term_id']), 'location-attributes', true);
+    }
+  }
+
+}
+
+
 add_shortcode('attributes', 'get_location_attributes_list');
 function get_location_attributes_list()
 {
   global $post;
+
+  get_location_attributes();
+
+  $post_terms = wp_get_object_terms( $post->ID, 'location-attributes', array( 'fields' => 'ids' ) );
 
   return
     '<ul class="location-attributes">' .
@@ -471,6 +511,7 @@ function get_location_attributes_list()
 			     'echo' => false,
 			     'taxonomy' => 'location-attributes',
 			     'title_li' => '',
+			     'include' => $post_terms,
 			     )) .
     '</ul>';
 }
