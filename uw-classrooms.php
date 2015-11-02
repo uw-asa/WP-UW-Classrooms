@@ -126,7 +126,7 @@ function init_room_page($sn_room)
 		     'post_title' => "{$building_page->post_title} {$sn_room['u_room_number']}",
 		     'post_type' => 'page',
 		     'post_parent' => $building_page->ID,
-		     'post_content' => "[photoalbum]\n\n[instructions]\n\n[assets]\n\n[attributes]\n",
+		     'post_content' => "[photoalbum]\n\n[instructions]\n\n[attributes]\n",
 		     );
 
   if ($existing_page)
@@ -163,7 +163,7 @@ function uw_classrooms_activate()
       wp_insert_term($type, 'location-type', array('parent' => $classroom_term_id));
 
   # init attribute hierarchy
-  foreach (array('Features', 'Furnishings', 'Dimensions', 'Accessibility', 'Instructor Area', 'Student Seating') as $section)
+  foreach (array('Furnishings', 'Dimensions', 'Accessibility', 'Instructor Area', 'Student Seating') as $section)
     if ( !term_exists($section, 'location-attributes') )
       wp_insert_term($section, 'location-attributes');
 
@@ -222,11 +222,13 @@ function uw_classrooms_activate()
     $result = json_decode($uw_snclient->get('cmn_location', $sys_id), true);
     $sn_building = $result['records'][0];
     
-    init_building_page($sn_building);
+    $location_map[$sys_id] = init_building_page($sn_building);
   }
 
   foreach ($sn_rooms as $sn_room)
-    init_room_page($sn_room);
+    $location_map[$sn_room['sys_id']] = init_room_page($sn_room);
+
+  get_location_assets($location_map);
 
   $widget_conditions_main = array('action' => 'show',
 				  'rules' => array(0 => array('major' => 'page', 'minor' => 'front'),
@@ -322,20 +324,17 @@ function get_location_meta($id, $field)
 }
 
 
-function get_location_assets()
+function get_location_assets($location_map)
 {
-  global $post, $uw_snclient;
+  global $uw_snclient;
 
-  if ( $location_assets = get_post_meta($post->ID, 'uw-location-assets', true) )
-    return $location_assets;
+  error_log("getting all assets");
 
-  if ( !$location_sys_id = get_post_meta($post->ID, 'uw-location-sys-id', true) )
-    return false;
-
-  $result = json_decode($uw_snclient->get_records('alm_hardware', "location={$location_sys_id}^install_status=1^u_publish=true"), true);
+  $result = json_decode($uw_snclient->get_records('alm_hardware',
+    "location.u_cte_managed_room=true^install_status=1^u_publish=true"), true);
 
   if (count($result['records']) < 1)
-    return false;
+    die("no assets found");
 
   //Hack to establish order of asset sections
   $assets['Control System'][0] = '';
@@ -343,18 +342,33 @@ function get_location_assets()
   $assets['Conferencing Unit'][0] = '';
   $assets['Lecture Capture'][0] = '';
 
+  $models = array();
+  
   foreach ($result['records'] as $record) {
-    //Pull in model info
-    $result = json_decode($uw_snclient->get('cmdb_model', $record['model']), true);
+    error_log("processing asset {$record['sys_id']}");
 
-    $record['model'] = $result['records'][0];
+    if ( !$record['model'] ) {
+      error_log("no model for asset {$record['sys_id']}");
+      if ( !$record['u_short_description'] )
+        $record['u_short_description'] = 'Unknown';
 
+    } elseif ( !isset($models[$record['model']]) ) {
+      //Pull in model info
+      $result = json_decode($uw_snclient->get('cmdb_model', $record['model']), true);
+  
+      if ( !isset($result['records']) )
+        die("model {$record['model']} not found");
+  
+      error_log("model {$record['model']} found");
+      $models[$record['model']] = $result['records'][0];
+    }
+ 
     if ( !$record['u_short_description'] ) {
-      $record['u_short_description'] = $record['model']['short_description'];
+      $record['u_short_description'] = $models[$record['model']]['short_description'];
     }
 
-    if ( $record['model']['short_description'] == 'Conferencing Unit' ) {
-      $record['Type'] = $record['model']['short_description'];
+    if ( $record['model'] && $models[$record['model']]['short_description'] == 'Conferencing Unit' ) {
+      $record['Type'] = $models[$record['model']]['short_description'];
     }
 
     if ( $record['u_short_description'] == 'Automated Panopto Recorder' ||
@@ -362,18 +376,17 @@ function get_location_assets()
       $record['Type'] = 'Lecture Capture';
     }
 
-    if ( !$record['Type'] ) {
-      $record['Type'] = $record['model']['u_sub_category'];
+    if ( !isset($record['Type']) && $record['model'] ) {
+      $record['Type'] = $models[$record['model']]['u_sub_category'];
     }
 
-    if ( !$record['Type'] ) {
+    if ( !isset($record['Type']) || !$record['Type'] ) {
       $record['Type'] = $record['dv_model_category'];
     }
 
-
     if ($record['Type'] == 'Control System'
       || $record['Type'] == 'Conferencing Unit'
-	|| $record['Type'] == 'Lecture Capture') {
+      || $record['Type'] == 'Lecture Capture') {
       $assets[$record['Type']][$record['u_number']] = $record;
     }
     else {
@@ -399,88 +412,55 @@ function get_location_assets()
 
     foreach($items as $item) {
       if ($item['u_short_description']) {
-	$item['Name'] = $item['u_short_description'];
+        $item['Name'] = $item['u_short_description'];
       } elseif ($item['model']['short_description']) {
-	$item['Name'] = $item['model']['short_description'];
+          $item['Name'] = $item['model']['short_description'];
       } elseif ($item['dv_model']) {
-	$item['Name'] = $item['dv_model'];
+        $item['Name'] = $item['dv_model'];
       } else {
-	$item['Name'] = $item['display_name'];
+        $item['Name'] = $item['display_name'];
       }
       $equipment[$item['Name']] = $item;
       if (!isset($quantity[$item['Name']]))
-	$quantity[$item['Name']] = 0;
+        $quantity[$item['Name']] = 0;
 
       $quantity[$item['Name']]++;
     }
 
     foreach($equipment as $row) {
 
-      $location_assets[$type][$row['Name']]['type'] = $row['Type'];
-      $location_assets[$type][$row['Name']]['quantity'] = $quantity[$row['Name']];
+      $location_assets[$row['location']][$type][$row['Name']]['type'] = $row['Type'];
+      $location_assets[$row['location']][$type][$row['Name']]['quantity'] = $quantity[$row['Name']];
 
     }
   }
 
-  add_post_meta($post->ID, 'uw-location-assets', $location_assets, true);
+  foreach ($location_assets as $location => $assets) {
+    if ( !isset($location_map[$location]) )
+      die("location {$location} not found");
 
-  return $location_assets;
-}
-
-
-add_shortcode('assets', 'get_location_asset_list');
-function get_location_asset_list()
-{
-  global $post;
-
-  if ( !$building = get_location_meta($post->ID, 'u_fac_code') )
-    return false;
-
-  if ( !$room = get_location_meta($post->ID, 'u_room_number') )
-    return false;
-
-  if ( !$location_assets = get_location_assets())
-    return false;
-
-  $content = '';
-  foreach ($location_assets as $type => $items) {
-    $content .= "<h3>{$type}</h3><ul>";
-    foreach ($items as $item => $meta) {
-      $content .= '<li><a href="http://www.cte.uw.edu/equipment/?room=' . urlencode("{$building} {$room}") . '&type=' . $meta['type'] . '">';
-      if ($meta['quantity'] == 1)
-	$content .= $item;
-      else
-	$content .= "{$meta['quantity']} {$item}s";
-      $content .= '</a></li>';
-    }
-    $content .= "</ul>";
+    add_post_meta($location_map[$location]->ID, 'uw-location-assets', $assets, true);
+    init_location_features($location_map[$location]);
   }
-
-  return $content;
 }
 
 
 function init_location_features($post = null)
 {
-  if ( !$location_assets = get_location_assets())
-    return false;
-
   if ( !($post instanceof WP_Post) )
     $post = get_post($post);
 
-  if ( !($term = term_exists('Features', 'location-attributes')) )
-    $term = wp_insert_term('Features', 'location-attributes');
-  $features_term_id = intval($term['term_id']);
-  wp_set_object_terms($post->ID, 'Features', 'location-attributes', true);
+  if ( !($location_assets = get_post_meta($post->ID, 'uw-location-assets', true)) )
+    return false;
 
   foreach ($location_assets as $category => $features) {
     if ( !($term = term_exists($category, 'location-attributes')) )
-      $term = wp_insert_term($category, 'location-attributes', array('parent' => $features_term_id));
+      $term = wp_insert_term($category, 'location-attributes');
     $category_term_id = intval($term['term_id']);
     wp_set_object_terms($post->ID, $category, 'location-attributes', true);
 
     foreach ($features as $feature => $attributes) {
-      if ( !(term_exists($feature, 'location-attributes')) )
+      if ( !(term_exists($feature, 'location-attributes', $category_term_id)) )
 	wp_insert_term($feature, 'location-attributes', array('parent' => $category_term_id));
       wp_set_object_terms($post->ID, $feature, 'location-attributes', true);
     }
@@ -493,7 +473,7 @@ function get_location_attributes_list()
 {
   global $post;
 
-  init_location_features();
+#  init_location_features();
 
   $post_terms = wp_get_object_terms( $post->ID, 'location-attributes', array( 'fields' => 'ids' ) );
 
