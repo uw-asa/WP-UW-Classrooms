@@ -4,6 +4,8 @@ class UW_Location_Attributes {
   
   function __construct() {
     add_action('init', array($this, 'init'));
+    add_action('admin_init', array($this, 'admin_init'));
+    add_action('admin_enqueue_scripts', array($this, 'admin_enqueue_scripts'));
     add_shortcode('attributes', array($this, 'shortcode'));
   }
 
@@ -12,6 +14,19 @@ class UW_Location_Attributes {
       'label' => 'Location Attributes',
       'hierarchical' => true,
     ));
+  }
+
+  function admin_init() {
+    wp_register_script('location-attributes',
+      plugin_dir_url(__FILE__) . 'location-attributes.js',
+      array('jquery'));
+  }
+
+  function admin_enqueue_scripts($hook_suffix) {
+    if ($hook_suffix != 'post.php')
+      return;
+
+    wp_enqueue_script( 'location-attributes' );
   }
 
   function shortcode() {
