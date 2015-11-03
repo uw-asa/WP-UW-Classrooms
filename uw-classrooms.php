@@ -10,6 +10,7 @@ License URI: https://www.gnu.org/licenses/gpl-2.0.html
 */
 
 require 'class.uw-servicenowclient.php';
+require 'location-attributes.php';
 
 
 add_filter('pigen_filter_convert_imageMagick', 'uw_classrooms_pigen_filter_convert_imageMagick', 10, 3);
@@ -61,11 +62,6 @@ function uw_classrooms_init()
   register_taxonomy('document-type', 'attachment', array(
 							 'label' => 'Document Types',
 							 'hierarchical' => false,
-							 ));
-
-  register_taxonomy('location-attributes', 'page', array(
-							 'label' => 'Attributes',
-							 'hierarchical' => true,
 							 ));
 
   $uw_snclient = new UW_ServiceNowClient(array(
@@ -493,27 +489,6 @@ function get_location_attributes()
     }
   }
 
-}
-
-
-add_shortcode('attributes', 'get_location_attributes_list');
-function get_location_attributes_list()
-{
-  global $post;
-
-  get_location_attributes();
-
-  $post_terms = wp_get_object_terms( $post->ID, 'location-attributes', array( 'fields' => 'ids' ) );
-
-  return
-    '<ul class="location-attributes">' .
-    wp_list_categories(array(
-			     'echo' => false,
-			     'taxonomy' => 'location-attributes',
-			     'title_li' => '',
-			     'include' => $post_terms,
-			     )) .
-    '</ul>';
 }
 
 
