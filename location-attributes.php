@@ -27,6 +27,7 @@ class UW_Location_Attributes {
       return;
 
     wp_enqueue_script( 'location-attributes' );
+    echo '<style type="text/css">#taxonomy-location-attributes .attribute-dropdown { float: right; }</style>';
   }
 
   function shortcode() {
