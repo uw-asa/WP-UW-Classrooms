@@ -70,7 +70,7 @@ function uw_classrooms_init()
 					       'password' => $uw_classrooms_options['servicenow_pass'],
 					       ));
 
-  wp_enqueue_style( 'uw-classrooms', plugins_url('uw-classrooms/style.css'));
+  wp_enqueue_style('uw-classrooms', plugin_dir_url(__FILE__) . 'style.css');
 }
 
 
