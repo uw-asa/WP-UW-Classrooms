@@ -7,6 +7,7 @@ class UW_Location_Attributes {
     add_action('admin_init', array($this, 'admin_init'));
     add_action('admin_enqueue_scripts', array($this, 'admin_enqueue_scripts'));
     add_shortcode('attributes', array($this, 'shortcode'));
+    add_action('save_post', array($this, 'save_post'));
   }
 
   function init() {
@@ -49,6 +50,21 @@ class UW_Location_Attributes {
         )) .
       '</ul>';
   }
+
+  function save_post( $post_id ) {
+    if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE )
+      return $post_id;
+
+    if ( 'page' != $_POST['post_type'] )
+      return $post_id;
+
+    if ( ! current_user_can( 'edit_page', $post_id ) )
+      return $post_id;
+
+    // Update the meta field.
+    update_post_meta( $post_id, 'uw-location-attributes', $_POST['uw-location-attributes'] );
+  }
+
 }
 
 new UW_Location_Attributes();
