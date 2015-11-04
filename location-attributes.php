@@ -20,14 +20,16 @@ class UW_Location_Attributes {
     wp_register_script('location-attributes',
       plugin_dir_url(__FILE__) . 'location-attributes.js',
       array('jquery'));
+    wp_register_style('location-attributes',
+      plugin_dir_url(__FILE__) . 'location-attributes.css');
   }
 
   function admin_enqueue_scripts($hook_suffix) {
     if ($hook_suffix != 'post.php')
       return;
 
-    wp_enqueue_script( 'location-attributes' );
-    echo '<style type="text/css">#taxonomy-location-attributes .attribute-dropdown { float: right; }</style>';
+    wp_enqueue_script('location-attributes');
+    wp_enqueue_style('location-attributes');
   }
 
   function shortcode() {
