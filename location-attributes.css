@@ -1,2 +1,4 @@
-#taxonomy-location-attributes .attribute-dropdown-button { float: right; }
-#taxonomy-location-attributes .attribute-dropdown li { text-align: right; }
+ul.location-attributes {
+    list-style: none;
+    padding-left: initial;
+}

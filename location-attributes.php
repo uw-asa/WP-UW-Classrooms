@@ -140,6 +140,7 @@ class UW_Location_Attributes {
   
   function __construct() {
     add_action('init', array($this, 'init'));
+    add_action('wp_enqueue_scripts', array($this, 'wp_enqueue_scripts'));
     add_action('admin_init', array($this, 'admin_init'));
     add_action('admin_enqueue_scripts', array($this, 'admin_enqueue_scripts'));
     add_shortcode('attributes', array($this, 'shortcode'));
@@ -151,9 +152,6 @@ class UW_Location_Attributes {
       'label' => 'Location Attributes',
       'hierarchical' => true,
     ));
-  }
-
-  function admin_init() {
     wp_register_script('location-attributes',
       plugin_dir_url(__FILE__) . 'location-attributes.js',
       array('jquery'));
@@ -161,14 +159,27 @@ class UW_Location_Attributes {
       plugin_dir_url(__FILE__) . 'location-attributes.css');
   }
 
+  function wp_enqueue_scripts($hook_suffix) {
+    wp_enqueue_script('location-attributes');
+    wp_enqueue_style('location-attributes');
+  }
+
+  function admin_init() {
+    wp_register_script('location-attributes-admin',
+      plugin_dir_url(__FILE__) . 'location-attributes-admin.js',
+      array('jquery'));
+    wp_register_style('location-attributes-admin',
+      plugin_dir_url(__FILE__) . 'location-attributes-admin.css');
+  }
+
   function admin_enqueue_scripts($hook_suffix) {
     if ($hook_suffix != 'post.php')
       return;
 
-    wp_localize_script('location-attributes', 'location_attributes',
+    wp_localize_script('location-attributes-admin', 'location_attributes',
       get_post_meta(get_the_ID(), 'uw-location-attributes', true));
-    wp_enqueue_script('location-attributes');
-    wp_enqueue_style('location-attributes');
+    wp_enqueue_script('location-attributes-admin');
+    wp_enqueue_style('location-attributes-admin');
   }
 
   function shortcode() {
