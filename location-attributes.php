@@ -144,7 +144,7 @@ class UW_Location_Attributes {
     add_action('admin_init', array($this, 'admin_init'));
     add_action('admin_enqueue_scripts', array($this, 'admin_enqueue_scripts'));
     add_shortcode('attributes', array($this, 'shortcode'));
-    add_action('save_post', array($this, 'save_post'));
+    add_action('save_post_page', array($this, 'save_post_page'));
   }
 
   function init() {
@@ -205,11 +205,8 @@ class UW_Location_Attributes {
       '</ul>';
   }
 
-  function save_post( $post_id ) {
+  function save_post_page( $post_id ) {
     if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE )
-      return $post_id;
-
-    if ( 'page' != $_POST['post_type'] )
       return $post_id;
 
     if ( ! current_user_can( 'edit_page', $post_id ) )
