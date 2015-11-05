@@ -462,6 +462,8 @@ function get_location_attributes()
 
   $codenum = get_location_meta($post->ID, 'name');
 
+  $location_attribute_meta = get_post_meta($post->ID, 'uw-location-attributes', true);
+
   $room_import = json_decode(file_get_contents("http://www.cte.uw.edu/room/" . urlencode($codenum) . "?json"), true);
 
   wp_set_object_terms($post->ID, NULL, 'location-attributes');
@@ -486,9 +488,16 @@ function get_location_attributes()
           'location-attributes', array('parent' => $section_id))))
           die(__FILE__ . ":" . __LINE__ . ' ' . $attr->get_error_message());
       wp_set_object_terms($post->ID, intval($attr['term_id']), 'location-attributes', true);
+
+      foreach (array('quantity', 'length', 'width') as $property) {
+        if ($properties[$property])
+          $location_attribute_meta[$attr['term_id']][$property] = $properties[$property];
+      }
     }
   }
 
+  if (count($location_attribute_meta))
+    update_post_meta($post->ID, 'uw-location-attributes', $location_attribute_meta);
 }
 
 
