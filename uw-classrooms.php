@@ -10,6 +10,7 @@ License URI: https://www.gnu.org/licenses/gpl-2.0.html
 */
 
 require 'class.uw-servicenowclient.php';
+require 'location-attributes.php';
 
 
 add_filter('pigen_filter_convert_imageMagick', 'uw_classrooms_pigen_filter_convert_imageMagick', 10, 3);
@@ -63,18 +64,13 @@ function uw_classrooms_init()
 							 'hierarchical' => false,
 							 ));
 
-  register_taxonomy('location-attributes', 'page', array(
-							 'label' => 'Attributes',
-							 'hierarchical' => true,
-							 ));
-
   $uw_snclient = new UW_ServiceNowClient(array(
 					       'base_url' => $uw_classrooms_options['servicenow_url'],
 					       'username' => $uw_classrooms_options['servicenow_user'],
 					       'password' => $uw_classrooms_options['servicenow_pass'],
 					       ));
 
-  wp_enqueue_style( 'uw-classrooms', plugins_url('uw-classrooms/style.css'));
+  wp_enqueue_style('uw-classrooms', plugin_dir_url(__FILE__) . 'style.css');
 }
 
 
@@ -163,7 +159,7 @@ function uw_classrooms_activate()
       wp_insert_term($type, 'location-type', array('parent' => $classroom_term_id));
 
   # init attribute hierarchy
-  foreach (array('Features', 'Furnishings', 'Dimensions', 'Accessibility', 'Instructor Area', 'Student Seating') as $section)
+  foreach (array('Furnishings', 'Dimensions', 'Accessibility', 'Instructor Area', 'Student Seating') as $section)
     if ( !term_exists($section, 'location-attributes') )
       wp_insert_term($section, 'location-attributes');
 
@@ -460,52 +456,94 @@ function get_location_asset_list()
 }
 
 
-function init_location_features($post = null)
-{
-  if ( !$location_assets = get_location_assets())
-    return false;
+require_once(ABSPATH . 'wp-admin/includes/image.php');
 
-  if ( !($post instanceof WP_Post) )
-    $post = get_post($post);
-
-  if ( !($term = term_exists('Features', 'location-attributes')) )
-    $term = wp_insert_term('Features', 'location-attributes');
-  $features_term_id = intval($term['term_id']);
-  wp_set_object_terms($post->ID, 'Features', 'location-attributes', true);
-
-  foreach ($location_assets as $category => $features) {
-    if ( !($term = term_exists($category, 'location-attributes')) )
-      $term = wp_insert_term($category, 'location-attributes', array('parent' => $features_term_id));
-    $category_term_id = intval($term['term_id']);
-    wp_set_object_terms($post->ID, $category, 'location-attributes', true);
-
-    foreach ($features as $feature => $attributes) {
-      if ( !(term_exists($feature, 'location-attributes')) )
-	wp_insert_term($feature, 'location-attributes', array('parent' => $category_term_id));
-      wp_set_object_terms($post->ID, $feature, 'location-attributes', true);
-    }
-  }
-}
-
-
-add_shortcode('attributes', 'get_location_attributes_list');
-function get_location_attributes_list()
+function import_attachments($room_import)
 {
   global $post;
 
-  init_location_features();
+  $uploaddir = wp_upload_dir();
 
-  $post_terms = wp_get_object_terms( $post->ID, 'location-attributes', array( 'fields' => 'ids' ) );
+  foreach (array('instructions', 'schematic') as $type) {
 
-  return
-    '<ul class="location-attributes">' .
-    wp_list_categories(array(
-			     'echo' => false,
-			     'taxonomy' => 'location-attributes',
-			     'title_li' => '',
-			     'include' => $post_terms,
-			     )) .
-    '</ul>';
+    if (!isset($room_import["{$type}_url"]))
+      continue;
+
+    $url = $room_import["{$type}_url"];
+
+    $filename = basename(parse_url($url, PHP_URL_PATH));
+
+    $uploadfile = $uploaddir['path'] . '/' . $filename;
+
+    $contents= file_get_contents($url);
+    $savefile = fopen($uploadfile, 'w');
+    fwrite($savefile, $contents);
+    fclose($savefile);
+
+    $wp_filetype = wp_check_filetype(basename($filename), null);
+
+    $attachment = array(
+      'post_mime_type' => $wp_filetype['type'],
+      'post_title' => $filename,
+      'post_content' => '',
+      'post_status' => 'inherit'
+    );
+
+    $attach_id = wp_insert_attachment( $attachment, $uploadfile, $post->ID );
+    wp_set_object_terms($attach_id, $type, 'document-type');
+
+    $imagenew = get_post( $attach_id );
+    $fullsizepath = get_attached_file( $imagenew->ID );
+    $attach_data = wp_generate_attachment_metadata( $attach_id, $fullsizepath );
+    wp_update_attachment_metadata( $attach_id, $attach_data );
+  }
+
+}
+
+
+function get_location_attributes()
+{
+  global $post;
+
+  $codenum = get_location_meta($post->ID, 'name');
+
+  if ( ($location_attribute_meta = get_post_meta($post->ID, 'uw-location-attributes', true)) )
+    return;
+
+  $room_import = json_decode(file_get_contents("http://www.cte.uw.edu/room/" . urlencode($codenum) . "?json"), true);
+
+  wp_set_object_terms($post->ID, NULL, 'location-attributes');
+
+  import_attachments($room_import);
+
+  foreach ($room_import['attribute_list'] as $section => $attributes) {
+    $section = trim($section);
+
+    if ( !($term = term_exists($section, 'location-attributes') ) )
+      continue;
+
+    $section_id = intval($term['term_id']);
+
+    wp_set_object_terms($post->ID, $section_id, 'location-attributes', true);
+    foreach ($attributes as $attribute => $properties) {
+      $attribute = trim($attribute);
+      if (empty($attribute))
+        continue;
+      if ($attr = term_exists($attribute, 'location-attributes'))
+        wp_update_term($attr['term_id'], 'location-attributes', array('parent' => $section_id));
+      else
+        if (is_wp_error($attr = wp_insert_term($attribute,
+          'location-attributes', array('parent' => $section_id))))
+          die(__FILE__ . ":" . __LINE__ . ' ' . $attr->get_error_message());
+      wp_set_object_terms($post->ID, intval($attr['term_id']), 'location-attributes', true);
+
+      foreach ($properties as $property => $value)
+          $location_attribute_meta[$attr['term_id']][$property] = $properties[$property];
+    }
+  }
+
+  if (count($location_attribute_meta))
+    update_post_meta($post->ID, 'uw-location-attributes', $location_attribute_meta);
 }
 
 
