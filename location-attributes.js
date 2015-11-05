@@ -28,9 +28,9 @@ jQuery(document).ready(function($){
 			' </div>';
 	}
 	
-	$( "#taxonomy-location-attributes .selectit" ).after(insert_attribute_dropdown);
+	$( "#taxonomy-location-attributes .children .selectit" ).after(insert_attribute_dropdown);
 
-	$( "#taxonomy-location-attributes .selectit" ).click(function() {
+	$( "#taxonomy-location-attributes .children .selectit" ).click(function() {
 		var checkbox = $(this).find(':checkbox').get(0);
 		var meta = 'uw-location-attributes['+checkbox.value+']';
 		var button = $('#'+checkbox.id+'-button');
