@@ -513,8 +513,16 @@ function get_location_attributes()
   $room_import = json_decode(file_get_contents("http://www.cte.uw.edu/room/" . urlencode($codenum) . "?json"), true);
 
   wp_set_object_terms($post->ID, NULL, 'location-attributes');
+  wp_set_object_terms($post->ID, NULL, 'location-type');
 
   import_attachments($room_import);
+
+  if ($term = term_exists('Classroom', 'location-type'))
+    $classroom_term_id = intval($term['id']);
+
+  if ( !$term = term_exists($room_import['room_type'], 'location-type') )
+    $term = wp_insert_term($room_import['room_type'], 'location-type', array('parent' => $classroom_term_id));
+  wp_set_object_terms($post->ID, intval($term['term_id']), 'location-type', true);
 
   foreach ($room_import['attribute_list'] as $section => $attributes) {
     $section = trim($section);
