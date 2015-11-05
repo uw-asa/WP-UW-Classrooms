@@ -29,6 +29,8 @@ class UW_Location_Attributes {
     if ($hook_suffix != 'post.php')
       return;
 
+    wp_localize_script('location-attributes', 'location_attributes',
+      get_post_meta(get_the_ID(), 'uw-location-attributes', true));
     wp_enqueue_script('location-attributes');
     wp_enqueue_style('location-attributes');
   }

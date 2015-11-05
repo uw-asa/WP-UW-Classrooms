@@ -2,8 +2,12 @@ jQuery(document).ready(function($){
 
 	function insert_attribute_dropdown(index) {
 		var checkbox = $(this).find(':checkbox').get(0);
-		var meta = 'uw-location-attributes['+checkbox.value+']';
+		var term_id = checkbox.value;
+		var meta = 'uw-location-attributes['+term_id+']';
 		var disabled = checkbox.checked ? '' : 'disabled="disabled"';
+		var quantity = location_attributes[term_id] ? location_attributes[term_id]["quantity"] : '';
+		var length = location_attributes[term_id] ? location_attributes[term_id]["length"] : '';
+		var width = location_attributes[term_id] ? location_attributes[term_id]["width"] : '';
 
 		return '' +
 			' <button type="button" class="attribute-dropdown-button" id="'+checkbox.id+'-button" >' +
@@ -12,11 +16,14 @@ jQuery(document).ready(function($){
 			' <div class="attribute-dropdown" id="'+checkbox.id+'-meta" style="display: none;">' +
 			'  <ul>' +
 			'   <li><label for="quantity">Quantity</label>' +
-			'    <input name="'+meta+'[quantity]" type="number" step="1" min="0" id="quantity" value="150" class="small-text" '+disabled+'></li>' +
+			'    <input name="'+meta+'[quantity]" type="number" step="1" min="0" id="quantity"' +
+			'     value="' + quantity + '" class="small-text" '+disabled+'></li>' +
 			'   <li><label for="length">Length</label>' +
-			'    <input name="'+meta+'[length]" type="number" step="1" min="0" id="length" value="150" class="small-text" '+disabled+'></li>' +
+			'    <input name="'+meta+'[length]" type="number" step="1" min="0" id="length"' +
+			'     value="' + length + '" class="small-text" '+disabled+'></li>' +
 			'   <li><label for="width">Width</label>' +
-			'    <input name="'+meta+'[width]" type="number" step="1" min="0" id="width" value="150" class="small-text" '+disabled+'></li>' +
+			'    <input name="'+meta+'[width]" type="number" step="1" min="0" id="width"' +
+			'     value="' + width + '" class="small-text" '+disabled+'></li>' +
 			'  </ul>' +
 			' </div>';
 	}
