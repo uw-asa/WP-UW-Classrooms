@@ -144,7 +144,7 @@ class UW_Location_Attributes {
     add_action('admin_init', array($this, 'action_admin_init'));
     add_action('admin_enqueue_scripts', array($this, 'action_admin_enqueue_scripts'));
     add_shortcode('attributes', array($this, 'shortcode_attributes'));
-    add_action('save_post_page', array($this, 'action_save_post_page'));
+    add_action('save_post_page', array($this, 'action_save_post_page'), 10, 2);
   }
 
   function action_init() {
@@ -205,12 +205,21 @@ class UW_Location_Attributes {
       '</ul>';
   }
 
-  function action_save_post_page($post_id) {
+  function action_save_post_page($post_id, $post) {
     if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE )
       return $post_id;
 
     if ( ! current_user_can( 'edit_page', $post_id ) )
       return $post_id;
+
+    $terms = wp_get_post_terms($post_id, 'location-attributes');
+    foreach($terms as $term){
+      while( $term->parent != 0 && !has_term($term->parent, 'location-attributes', $post) ) {
+	// move upward until we get to 0 level terms
+	wp_set_post_terms($post_id, array($term->parent), 'location-attributes', true);
+	$term = get_term($term->parent, 'location-attributes');
+      }
+    }
 
     // Update the meta field.
     update_post_meta( $post_id, 'uw-location-attributes', $_POST['uw-location-attributes'] );
