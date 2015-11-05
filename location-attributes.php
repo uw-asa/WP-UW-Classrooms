@@ -139,15 +139,15 @@ class Walker_Location_Attribute extends Walker_Category {
 class UW_Location_Attributes {
   
   function __construct() {
-    add_action('init', array($this, 'init'));
-    add_action('wp_enqueue_scripts', array($this, 'wp_enqueue_scripts'));
-    add_action('admin_init', array($this, 'admin_init'));
-    add_action('admin_enqueue_scripts', array($this, 'admin_enqueue_scripts'));
-    add_shortcode('attributes', array($this, 'shortcode'));
-    add_action('save_post_page', array($this, 'save_post_page'));
+    add_action('init', array($this, 'action_init'));
+    add_action('wp_enqueue_scripts', array($this, 'action_wp_enqueue_scripts'));
+    add_action('admin_init', array($this, 'action_admin_init'));
+    add_action('admin_enqueue_scripts', array($this, 'action_admin_enqueue_scripts'));
+    add_shortcode('attributes', array($this, 'shortcode_attributes'));
+    add_action('save_post_page', array($this, 'action_save_post_page'));
   }
 
-  function init() {
+  function action_init() {
     register_taxonomy('location-attributes', 'page', array(
       'label' => 'Location Attributes',
       'hierarchical' => true,
@@ -159,12 +159,12 @@ class UW_Location_Attributes {
       plugin_dir_url(__FILE__) . 'location-attributes.css');
   }
 
-  function wp_enqueue_scripts($hook_suffix) {
+  function action_wp_enqueue_scripts($hook_suffix) {
     wp_enqueue_script('location-attributes');
     wp_enqueue_style('location-attributes');
   }
 
-  function admin_init() {
+  function action_admin_init() {
     wp_register_script('location-attributes-admin',
       plugin_dir_url(__FILE__) . 'location-attributes-admin.js',
       array('jquery'));
@@ -172,7 +172,7 @@ class UW_Location_Attributes {
       plugin_dir_url(__FILE__) . 'location-attributes-admin.css');
   }
 
-  function admin_enqueue_scripts($hook_suffix) {
+  function action_admin_enqueue_scripts($hook_suffix) {
     if ($hook_suffix != 'post.php')
       return;
 
@@ -182,7 +182,7 @@ class UW_Location_Attributes {
     wp_enqueue_style('location-attributes-admin');
   }
 
-  function shortcode() {
+  function shortcode_attributes() {
     global $post;
 
     get_location_attributes();
@@ -205,7 +205,7 @@ class UW_Location_Attributes {
       '</ul>';
   }
 
-  function save_post_page( $post_id ) {
+  function action_save_post_page($post_id) {
     if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE )
       return $post_id;
 
