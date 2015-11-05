@@ -456,17 +456,65 @@ function get_location_asset_list()
 }
 
 
+require_once(ABSPATH . 'wp-admin/includes/image.php');
+
+function import_attachments($room_import)
+{
+  global $post;
+
+  $uploaddir = wp_upload_dir();
+
+  foreach (array('instructions', 'schematic') as $type) {
+
+    if (!isset($room_import["{$type}_url"]))
+      continue;
+
+    $url = $room_import["{$type}_url"];
+
+    $filename = basename(parse_url($url, PHP_URL_PATH));
+
+    $uploadfile = $uploaddir['path'] . '/' . $filename;
+
+    $contents= file_get_contents($url);
+    $savefile = fopen($uploadfile, 'w');
+    fwrite($savefile, $contents);
+    fclose($savefile);
+
+    $wp_filetype = wp_check_filetype(basename($filename), null);
+
+    $attachment = array(
+      'post_mime_type' => $wp_filetype['type'],
+      'post_title' => $filename,
+      'post_content' => '',
+      'post_status' => 'inherit'
+    );
+
+    $attach_id = wp_insert_attachment( $attachment, $uploadfile, $post->ID );
+    wp_set_object_terms($attach_id, $type, 'document-type');
+
+    $imagenew = get_post( $attach_id );
+    $fullsizepath = get_attached_file( $imagenew->ID );
+    $attach_data = wp_generate_attachment_metadata( $attach_id, $fullsizepath );
+    wp_update_attachment_metadata( $attach_id, $attach_data );
+  }
+
+}
+
+
 function get_location_attributes()
 {
   global $post;
 
   $codenum = get_location_meta($post->ID, 'name');
 
-  $location_attribute_meta = get_post_meta($post->ID, 'uw-location-attributes', true);
+  if ( ($location_attribute_meta = get_post_meta($post->ID, 'uw-location-attributes', true)) )
+    return;
 
   $room_import = json_decode(file_get_contents("http://www.cte.uw.edu/room/" . urlencode($codenum) . "?json"), true);
 
   wp_set_object_terms($post->ID, NULL, 'location-attributes');
+
+  import_attachments($room_import);
 
   foreach ($room_import['attribute_list'] as $section => $attributes) {
     $section = trim($section);
@@ -489,10 +537,8 @@ function get_location_attributes()
           die(__FILE__ . ":" . __LINE__ . ' ' . $attr->get_error_message());
       wp_set_object_terms($post->ID, intval($attr['term_id']), 'location-attributes', true);
 
-      foreach (array('quantity', 'length', 'width') as $property) {
-        if ($properties[$property])
+      foreach ($properties as $property => $value)
           $location_attribute_meta[$attr['term_id']][$property] = $properties[$property];
-      }
     }
   }
 
