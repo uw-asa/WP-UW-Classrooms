@@ -673,9 +673,29 @@ function get_schematic_link()
 }
 
 
+class Walker_Page_FirstLetters extends Walker_Page {
+  public function __construct(){
+    $this->current_letter = null;
+  }
+
+  public function start_el( &$output, $page, $depth = 0, $args = array(), $current_page = 0 ) {
+    $letter = substr($page->post_title, 0, 1);
+    if ($letter != $this->current_letter) {
+      $cb_args = array_merge( array(&$output, $depth), $args);
+      call_user_func_array(array($this, 'end_lvl'), $cb_args);
+      call_user_func_array(array($this, 'start_lvl'), $cb_args);
+      $this->current_letter = $letter;
+    }
+    parent::start_el($output, $page, $depth, $args, $current_page);
+  }
+}
+
+
 add_shortcode('buildings', 'buildings_handler');
 function buildings_handler()
 {
+  $walker = new Walker_Page_FirstLetters;
+
   $building_list = get_posts(array(
 				   'post_type' => 'page',
 				   'numberposts' => -1,
@@ -692,7 +712,9 @@ function buildings_handler()
 
   echo '<div class="buildings"><ul>';
   wp_list_pages(array('include' => array_map(function($page) { return $page->ID; }, $building_list),
-		      'title_li' => ''));
+		      'title_li' => '',
+		      'walker' => $walker,
+		      ));
   echo '</ul></div>';
 }
 
