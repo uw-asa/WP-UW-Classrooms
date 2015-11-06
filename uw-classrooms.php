@@ -306,6 +306,27 @@ function uw_classrooms_setting_password($args)
 }
 
 
+function get_location_data($post = null, $force = false)
+{
+  global $uw_snclient;
+
+  if ( !($post instanceof WP_Post) )
+    $post = get_post($post);
+
+  if ( !$force &&
+       ($location_data = get_post_meta($post->ID, 'uw-location-data', true)) )
+    return $location_data;
+
+  if ( !$location_sys_id = get_post_meta($post->ID, 'uw-location-sys-id', true) )
+    return false;
+
+  $result = json_decode($uw_snclient->get('cmn_location', $location_sys_id), true);
+  $location_data = $result['records'][0];
+
+  update_post_meta($post->ID, 'uw-location-data', $location_data);
+}
+
+
 function get_location_meta($id, $field)
 {
   if ( ! ($data = get_post_meta($id, 'uw-location-data', true)) )
@@ -811,10 +832,16 @@ function action_save_post_page($post_id, $post) {
   if ( isset($_POST['uw_location_refresh_nonce']) &&
        wp_verify_nonce($_POST['uw_location_refresh_nonce'], 'uw_location_refresh_action') &&
        isset($_POST['uw_location_refresh']) ) {
-    if ($_POST['uw_location_refresh'] == 'assets') {
+    switch ($_POST['uw_location_refresh']) {
+    case 'data':
+      get_location_data($post_id, true);
+      break;
+    case 'assets':
       get_location_assets($post_id, true);
-    } else if ($_POST['uw_location_refresh'] == 'attributes') {
+      break;
+    case 'attributes':
       get_location_attributes($post_id, true);
+      break;
     }
   }
 }
@@ -835,12 +862,17 @@ function add_all_parent_terms($taxonomy, $post_id) {
 add_action('add_meta_boxes_page', 'action_add_meta_boxes_page');
 function action_add_meta_boxes_page() {
   add_meta_box('uw-location-refresh',
-	       "Refresh Location",
-	       function($post){
+	       "Location Metadata",
+	       function($post) {
 		 // Add a nonce field so we can check for it later.
 		 wp_nonce_field('uw_location_refresh_action', 'uw_location_refresh_nonce');
 
-		 echo '<button id="uw_location_refresh_assets" name="uw_location_refresh" value="assets"><span>Refresh Assets</span></button>';
-		 echo '<button id="uw_location_refresh_attributes" name="uw_location_refresh" value="attributes"><span>Refresh Attributes</span></button>';
+		 echo '<pre>' . json_encode(get_post_meta($post->ID, 'uw-location-data', true), JSON_PRETTY_PRINT) . '</pre>';
+		 echo '<button id="uw_location_refresh_data" name="uw_location_refresh" value="data"><span>Refresh Location Data</span></button>';
+
+		 echo '<pre>' . json_encode(get_post_meta($post->ID, 'uw-location-assets', true), JSON_PRETTY_PRINT) . '</pre>';
+		 echo '<button id="uw_location_refresh_assets" name="uw_location_refresh" value="assets"><span>Refresh Location Assets</span></button>';
+
+		 echo '<button id="uw_location_refresh_attributes" name="uw_location_refresh" value="attributes"><span>Re-import Location Attributes</span></button>';
 	       });
 }
