@@ -318,11 +318,15 @@ function get_location_meta($id, $field)
 }
 
 
-function get_location_assets()
+function get_location_assets($post = null, $force = false)
 {
-  global $post, $uw_snclient;
+  global $uw_snclient;
 
-  if ( $location_assets = get_post_meta($post->ID, 'uw-location-assets', true) )
+  if ( !($post instanceof WP_Post) )
+    $post = get_post($post);
+
+  if ( !$force &&
+       ($location_assets = get_post_meta($post->ID, 'uw-location-assets', true)) )
     return $location_assets;
 
   if ( !$location_sys_id = get_post_meta($post->ID, 'uw-location-sys-id', true) )
@@ -418,7 +422,7 @@ function get_location_assets()
     }
   }
 
-  add_post_meta($post->ID, 'uw-location-assets', $location_assets, true);
+  update_post_meta($post->ID, 'uw-location-assets', $location_assets);
 
   return $location_assets;
 }
@@ -501,13 +505,15 @@ function import_attachments($room_import)
 }
 
 
-function get_location_attributes()
+function get_location_attributes($post = null, $force = false)
 {
-  global $post;
+  if ( !($post instanceof WP_Post) )
+    $post = get_post($post);
 
   $codenum = get_location_meta($post->ID, 'name');
 
-  if ( ($location_attribute_meta = get_post_meta($post->ID, 'uw-location-attributes', true)) )
+  if ( !$force &&
+       ($location_attribute_meta = get_post_meta($post->ID, 'uw-location-attributes', true)) )
     return;
 
   $room_import = json_decode(file_get_contents("http://www.cte.uw.edu/room/" . urlencode($codenum) . "?json"), true);
@@ -801,6 +807,16 @@ function action_save_post_page($post_id, $post) {
     return $post_id;
 
   add_all_parent_terms('location-type', $post_id);
+
+  if ( isset($_POST['uw_location_refresh_nonce']) &&
+       wp_verify_nonce($_POST['uw_location_refresh_nonce'], 'uw_location_refresh_action') &&
+       isset($_POST['uw_location_refresh']) ) {
+    if ($_POST['uw_location_refresh'] == 'assets') {
+      get_location_assets($post_id, true);
+    } else if ($_POST['uw_location_refresh'] == 'attributes') {
+      get_location_attributes($post_id, true);
+    }
+  }
 }
 
 
@@ -813,4 +829,18 @@ function add_all_parent_terms($taxonomy, $post_id) {
       $term = get_term($term->parent, $taxonomy);
     }
   }
+}
+
+
+add_action('add_meta_boxes_page', 'action_add_meta_boxes_page');
+function action_add_meta_boxes_page() {
+  add_meta_box('uw-location-refresh',
+	       "Refresh Location",
+	       function($post){
+		 // Add a nonce field so we can check for it later.
+		 wp_nonce_field('uw_location_refresh_action', 'uw_location_refresh_nonce');
+
+		 echo '<button id="uw_location_refresh_assets" name="uw_location_refresh" value="assets"><span>Refresh Assets</span></button>';
+		 echo '<button id="uw_location_refresh_attributes" name="uw_location_refresh" value="attributes"><span>Refresh Attributes</span></button>';
+	       });
 }
