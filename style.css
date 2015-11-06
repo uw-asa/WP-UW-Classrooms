@@ -2,3 +2,14 @@
     border: solid black 1px;
     padding: 10px;
 }
+
+ul.uw-sidebar-menu.first-level {
+    max-height: 330px;
+    overflow-y: hidden;
+    z-index: 100;
+    position: relative;
+}
+
+ul.uw-sidebar-menu.first-level:hover {
+    overflow-y: visible;
+}
