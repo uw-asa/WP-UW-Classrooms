@@ -13,3 +13,9 @@ ul.uw-sidebar-menu.first-level {
 ul.uw-sidebar-menu.first-level:hover {
     overflow-y: visible;
 }
+
+div.buildings ul {
+    list-style: none;
+    padding-left: initial;
+    columns: 2; -webkit-columns: 2; -moz-columns: 2;
+}

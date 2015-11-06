@@ -690,8 +690,10 @@ function buildings_handler()
 							)
 				   ));
 
+  echo '<div class="buildings"><ul>';
   wp_list_pages(array('include' => array_map(function($page) { return $page->ID; }, $building_list),
-		      'title_li' => 'Buildings'));
+		      'title_li' => ''));
+  echo '</ul></div>';
 }
 
 
