@@ -523,6 +523,7 @@ function get_location_attributes()
   if ( !$term = term_exists($room_import['room_type'], 'location-type') )
     $term = wp_insert_term($room_import['room_type'], 'location-type', array('parent' => $classroom_term_id));
   wp_set_object_terms($post->ID, intval($term['term_id']), 'location-type', true);
+  add_all_parent_terms('location-type', $post->ID);
 
   foreach ($room_import['attribute_list'] as $section => $attributes) {
     $section = trim($section);
@@ -764,4 +765,28 @@ function uw_classrooms_building_content()
       </table>';
 
   return $content;
+}
+
+
+add_action('save_post_page', 'action_save_post_page', 10, 2);
+function action_save_post_page($post_id, $post) {
+  if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE )
+    return $post_id;
+
+  if ( ! current_user_can( 'edit_page', $post_id ) )
+    return $post_id;
+
+  add_all_parent_terms('location-type', $post_id);
+}
+
+
+function add_all_parent_terms($taxonomy, $post_id) {
+  $terms = wp_get_post_terms($post_id, $taxonomy);
+  foreach($terms as $term){
+    while( $term->parent != 0 && !has_term($term->parent, $taxonomy, $post) ) {
+      // move upward until we get to 0 level terms
+      wp_set_post_terms($post_id, array($term->parent), $taxonomy, true);
+      $term = get_term($term->parent, $taxonomy);
+    }
+  }
 }
