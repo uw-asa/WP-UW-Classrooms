@@ -499,18 +499,11 @@ function get_location_asset_list()
 
 require_once(ABSPATH . 'wp-admin/includes/image.php');
 
-function import_attachments($room_import)
+function import_attachment($type, $url)
 {
   global $post;
 
   $uploaddir = wp_upload_dir();
-
-  foreach (array('instructions', 'schematic') as $type) {
-
-    if (!isset($room_import["{$type}_url"]))
-      continue;
-
-    $url = $room_import["{$type}_url"];
 
     $filename = basename(parse_url($url, PHP_URL_PATH));
 
@@ -537,7 +530,6 @@ function import_attachments($room_import)
     $fullsizepath = get_attached_file( $imagenew->ID );
     $attach_data = wp_generate_attachment_metadata( $attach_id, $fullsizepath );
     wp_update_attachment_metadata( $attach_id, $attach_data );
-  }
 
 }
 
@@ -558,7 +550,9 @@ function get_location_attributes($post = null, $force = false)
   wp_set_object_terms($post->ID, NULL, 'location-attributes');
   wp_set_object_terms($post->ID, NULL, 'location-type');
 
-  import_attachments($room_import);
+  foreach (array('instructions', 'schematic') as $type)
+    if (isset($room_import["{$type}_url"]))
+      import_attachment($type, $room_import["{$type}_url"]);
 
   if ($term = term_exists('Classroom', 'location-type'))
     $classroom_term_id = intval($term['id']);
