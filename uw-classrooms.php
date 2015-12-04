@@ -32,7 +32,7 @@ function location_handler($atts)
   if ( !$atts['field'] )
     return '';
 
-  if ( !($data = get_post_meta(get_the_ID(), 'uw-location-data', true)) )
+  if ( !($data = get_location_data()) )
     return '';
 
   if ( !isset($data[$atts['field']]) )
@@ -99,6 +99,7 @@ function init_building_page($sn_building)
   wp_set_object_terms($id, 'Building', 'location-type');
   update_post_meta($id, 'uw-location-sys-id', $sn_building['sys_id']);
   update_post_meta($id, 'uw-location-data', $sn_building);
+  update_post_meta($id, 'uw-location-data-time', $_SERVER['REQUEST_TIME']);
 
   return get_post($id);
 }
@@ -133,6 +134,7 @@ function init_room_page($sn_room)
   wp_set_object_terms($id, 'Classroom', 'location-type');
   update_post_meta($id, 'uw-location-sys-id', $sn_room['sys_id']);
   update_post_meta($id, 'uw-location-data', $sn_room);
+  update_post_meta($id, 'uw-location-data-time', $_SERVER['REQUEST_TIME']);
 
   return get_post($id);
 }
@@ -273,34 +275,38 @@ function uw_classrooms_admin_init()
   register_setting('uw_classrooms_options', 'uw_classrooms_options');
 
   add_settings_section('uw_classrooms_servicenow', 'UW Connect Settings', 'uw_classrooms_servicenow_settings', __FILE__);
-  add_settings_field('servicenow_url', 'URL', 'uw_classrooms_setting_text',
+  add_settings_field('servicenow_url', 'URL', 'uw_classrooms_setting_input',
 		     __FILE__, 'uw_classrooms_servicenow',
-		     array('label_for' => 'servicenow_url'));
-  add_settings_field('servicenow_user', 'Username', 'uw_classrooms_setting_text',
+		     array('label_for' => 'servicenow_url', 'input_type' => 'text'));
+  add_settings_field('servicenow_user', 'Username', 'uw_classrooms_setting_input',
 		     __FILE__, 'uw_classrooms_servicenow',
-		     array('label_for' => 'servicenow_user'));
-  add_settings_field('servicenow_pass', 'Password', 'uw_classrooms_setting_password',
+		     array('label_for' => 'servicenow_user', 'input_type' => 'text'));
+  add_settings_field('servicenow_pass', 'Password', 'uw_classrooms_setting_input',
 		     __FILE__, 'uw_classrooms_servicenow',
-		     array('label_for' => 'servicenow_pass'));
+		     array('label_for' => 'servicenow_pass', 'input_type' => 'password'));
+
+  add_settings_section('uw_classrooms_location', 'Location Settings', 'uw_classrooms_location_settings', __FILE__);
+  add_settings_field('location_data_timeout', 'Location Data Timeout (in hours)', 'uw_classrooms_setting_input',
+		     __FILE__, 'uw_classrooms_location',
+		     array('label_for' => 'location_data_timeout', 'input_type' => 'number'));
+  add_settings_field('location_assets_timeout', 'Location Assets Timeout (in hours)', 'uw_classrooms_setting_input',
+		     __FILE__, 'uw_classrooms_location',
+		     array('label_for' => 'location_assets_timeout', 'input_type' => 'number'));
 }
 function uw_classrooms_servicenow_settings()
 {
 }
-function uw_classrooms_setting_text($args)
+function uw_classrooms_location_settings()
 {
-  global $uw_classrooms_options;
-
-?>
-<input type="text" name="uw_classrooms_options[<?= $args['label_for'] ?>]" value="<?= $uw_classrooms_options[$args['label_for']] ?>" />
-<?php
-
 }
-function uw_classrooms_setting_password($args)
+function uw_classrooms_setting_input($args)
 {
   global $uw_classrooms_options;
 
 ?>
-<input type="password" name="uw_classrooms_options[<?= $args['label_for'] ?>]" value="<?= $uw_classrooms_options[$args['label_for']] ?>" />
+<input type="<?= $args['input_type'] ?>"
+       name="uw_classrooms_options[<?= $args['label_for'] ?>]"
+       value="<?= $uw_classrooms_options[$args['label_for']] ?>" />
 <?php
 
 }
@@ -308,10 +314,13 @@ function uw_classrooms_setting_password($args)
 
 function get_location_data($post = null, $force = false)
 {
-  global $uw_snclient;
+  global $uw_snclient, $uw_classrooms_options;
 
   if ( !($post instanceof WP_Post) )
     $post = get_post($post);
+
+  if ( ($_SERVER['REQUEST_TIME'] - get_post_meta($post->ID, 'uw-location-data-time', true)) > $uw_classrooms_options['location_data_timeout'] )
+    $force = true;
 
   if ( !$force &&
        ($location_data = get_post_meta($post->ID, 'uw-location-data', true)) )
@@ -324,12 +333,15 @@ function get_location_data($post = null, $force = false)
   $location_data = $result['records'][0];
 
   update_post_meta($post->ID, 'uw-location-data', $location_data);
+  update_post_meta($post->ID, 'uw-location-data-time', $_SERVER['REQUEST_TIME']);
+
+  return $location_data;
 }
 
 
 function get_location_meta($id, $field)
 {
-  if ( ! ($data = get_post_meta($id, 'uw-location-data', true)) )
+  if ( !($data = get_location_data($id)) )
     return false;
 
   if ( !isset($data[$field]) )
@@ -341,10 +353,13 @@ function get_location_meta($id, $field)
 
 function get_location_assets($post = null, $force = false)
 {
-  global $uw_snclient;
+  global $uw_snclient, $uw_classrooms_options;
 
   if ( !($post instanceof WP_Post) )
     $post = get_post($post);
+
+  if ( ($_SERVER['REQUEST_TIME'] - get_post_meta($post->ID, 'uw-location-assets-time', true)) > $uw_classrooms_options['location_assets_timeout'] )
+    $force = true;
 
   if ( !$force &&
        ($location_assets = get_post_meta($post->ID, 'uw-location-assets', true)) )
@@ -444,6 +459,7 @@ function get_location_assets($post = null, $force = false)
   }
 
   update_post_meta($post->ID, 'uw-location-assets', $location_assets);
+  update_post_meta($post->ID, 'uw-location-assets-time', $_SERVER['REQUEST_TIME']);
 
   return $location_assets;
 }
@@ -578,8 +594,10 @@ function get_location_attributes($post = null, $force = false)
     }
   }
 
-  if (count($location_attribute_meta))
+  if (count($location_attribute_meta)) {
     update_post_meta($post->ID, 'uw-location-attributes', $location_attribute_meta);
+    update_post_meta($post->ID, 'uw-location-attributes-time', $_SERVER['REQUEST_TIME']);
+  }
 }
 
 
@@ -868,11 +886,14 @@ function action_add_meta_boxes_page() {
 		 wp_nonce_field('uw_location_refresh_action', 'uw_location_refresh_nonce');
 
 		 echo '<pre>' . json_encode(get_post_meta($post->ID, 'uw-location-data', true), JSON_PRETTY_PRINT) . '</pre>';
+		 printf('<p>age: %.2f hours</p>', ($_SERVER['REQUEST_TIME'] - get_post_meta($post->ID, 'uw-location-data-time', true)) / 60 / 60);
 		 echo '<button id="uw_location_refresh_data" name="uw_location_refresh" value="data"><span>Refresh Location Data</span></button>';
 
 		 echo '<pre>' . json_encode(get_post_meta($post->ID, 'uw-location-assets', true), JSON_PRETTY_PRINT) . '</pre>';
+		 printf('<p>age: %.2f hours</p>', ($_SERVER['REQUEST_TIME'] - get_post_meta($post->ID, 'uw-location-assets-time', true)) / 60 / 60);
 		 echo '<button id="uw_location_refresh_assets" name="uw_location_refresh" value="assets"><span>Refresh Location Assets</span></button>';
 
+		 echo '<p></p>';
 		 echo '<button id="uw_location_refresh_attributes" name="uw_location_refresh" value="attributes"><span>Re-import Location Attributes</span></button>';
 	       });
 }
