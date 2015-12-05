@@ -178,53 +178,37 @@ function uw_classrooms_activate()
       $home_page_id = $page->ID;
   }
 
-  $page = array(
-		'comment_status' => 'open',
-		'ping_status' =>  'closed',
-		'post_name' => 'Classrooms',
-		'post_status' => 'publish',
-		'post_title' => 'Classrooms',
-		'post_type' => 'page',
-		'post_content' => "[buildings]\n",
-		);
-  if ($front_page_id)
-    $page['ID'] = $front_page_id;
+  if (!$front_page_id) {
+    $page = array(
+		  'comment_status' => 'open',
+		  'ping_status' =>  'closed',
+		  'post_name' => 'Classrooms',
+		  'post_status' => 'publish',
+		  'post_title' => 'Classrooms',
+		  'post_type' => 'page',
+		  'post_content' => "[buildings]\n",
+		  );
 
-  $front_page_id = wp_insert_post($page, false);
+    $front_page_id = wp_insert_post($page, false);
+  }
+
   update_option('show_on_front', 'page');
   update_option('page_on_front', $front_page_id);
 
-  $page = array(
-		'comment_status' => 'open',
-		'ping_status' =>  'closed',
-		'post_name' => 'Updates',
-		'post_status' => 'publish',
-		'post_title' => 'Updates',
-		'post_type' => 'page',
-		);
-  if ($home_page_id)
-    $page['ID'] = $home_page_id;
+  if (!$home_page_id) {
+    $page = array(
+		  'comment_status' => 'open',
+		  'ping_status' =>  'closed',
+		  'post_name' => 'Updates',
+		  'post_status' => 'publish',
+		  'post_title' => 'Updates',
+		  'post_type' => 'page',
+		  );
 
-  $home_page_id = wp_insert_post($page, false);
-  update_option('page_for_posts', $home_page_id);
-
-  # init building and room pages
-  $result = json_decode($uw_snclient->get_records('cmn_location', "u_cte_managed_room=true"), true);
-  $sn_rooms = $result['records'];
-
-  $buildings = array();
-  foreach ($sn_rooms as $sn_room)
-    $buildings[$sn_room['parent']] = $sn_room['parent'];
-
-  foreach ($buildings as $sys_id) {
-    $result = json_decode($uw_snclient->get('cmn_location', $sys_id), true);
-    $sn_building = $result['records'][0];
-    
-    init_building_page($sn_building);
+    $home_page_id = wp_insert_post($page, false);
   }
 
-  foreach ($sn_rooms as $sn_room)
-    init_room_page($sn_room);
+  update_option('page_for_posts', $home_page_id);
 
   $widget_conditions_main = array('action' => 'show',
 				  'rules' => array(0 => array('major' => 'page', 'minor' => 'front'),
@@ -286,6 +270,9 @@ function uw_classrooms_admin_init()
 		     array('label_for' => 'servicenow_pass', 'input_type' => 'password'));
 
   add_settings_section('uw_classrooms_location', 'Location Settings', 'uw_classrooms_location_settings', __FILE__);
+  add_settings_field('location_pages_timeout', 'Location Pages Timeout (in hours)', 'uw_classrooms_setting_input',
+		     __FILE__, 'uw_classrooms_location',
+		     array('label_for' => 'location_pages_timeout', 'input_type' => 'number'));
   add_settings_field('location_data_timeout', 'Location Data Timeout (in hours)', 'uw_classrooms_setting_input',
 		     __FILE__, 'uw_classrooms_location',
 		     array('label_for' => 'location_data_timeout', 'input_type' => 'number'));
@@ -312,6 +299,93 @@ function uw_classrooms_setting_input($args)
 }
 
 
+function get_location_pages($parent, $force = false)
+{
+  global $uw_snclient, $uw_classrooms_options;
+
+  if ( $_SERVER['REQUEST_TIME'] - get_option('uw-location-pages-time') > $uw_classrooms_options['location_pages_timeout']*60*60 )
+    $force = true;
+
+  if (!$force) {
+    if ($parent) {
+      $room_list = get_pages(array('child_of' => $parent));
+
+      if ( count($room_list) )
+	return $room_list;
+    }
+
+    else {
+      $building_list = get_posts(array(
+				       'post_type' => 'page',
+				       'numberposts' => -1,
+				       'orderby' => 'post_title',
+				       'tax_query' => array(
+							    array(
+								  'taxonomy' => 'location-type',
+								  'field' => 'slug',
+								  'terms' => 'building',
+								  'include_children' => false,
+								  )
+							    )
+				       ));
+
+      if ( count($building_list) )
+	return $building_list;
+    }
+  }
+
+  $location_page_list = get_posts(array(
+					'post_type' => 'page',
+					'numberposts' => -1,
+					'meta_key' => 'uw-location-sys-id',
+					));
+
+  $location_pages = array();
+  foreach ($location_page_list as $location_page)
+    $location_pages[get_post_meta($location_page->ID, 'uw-location-sys-id', true)] = $location_page;
+
+  $result = json_decode($uw_snclient->get_records('cmn_location', "u_cte_managed_room=true"), true);
+  $sn_rooms = $result['records'];
+
+  $sn_building_sys_ids = array();
+  foreach ($sn_rooms as $sn_room)
+    $sn_building_sys_ids[$sn_room['parent']] = $sn_room['parent'];
+
+  foreach ($sn_building_sys_ids as $sys_id) {
+    if (!array_key_exists($sys_id, $location_pages)) {
+      $result = json_decode($uw_snclient->get('cmn_location', $sys_id), true);
+      $sn_building = $result['records'][0];
+
+      init_building_page($sn_building);
+    }
+  }
+
+  foreach ($sn_rooms as $sn_room)
+    if (!array_key_exists($sn_room['sys_id'], $location_pages))
+      init_room_page($sn_room);
+
+  update_option('uw-location-pages-time', $_SERVER['REQUEST_TIME']);
+
+  if ($parent)
+    return get_pages(array('child_of' => $parent));
+
+  else
+    return get_posts(array(
+			   'post_type' => 'page',
+			   'numberposts' => -1,
+			   'orderby' => 'post_title',
+			   'tax_query' => array(
+						array(
+						      'taxonomy' => 'location-type',
+						      'field' => 'slug',
+						      'terms' => 'building',
+						      'include_children' => false,
+						      )
+						)
+			   ));
+}
+
+
 function get_location_data($post = null, $force = false)
 {
   global $uw_snclient, $uw_classrooms_options;
@@ -319,7 +393,7 @@ function get_location_data($post = null, $force = false)
   if ( !($post instanceof WP_Post) )
     $post = get_post($post);
 
-  if ( ($_SERVER['REQUEST_TIME'] - get_post_meta($post->ID, 'uw-location-data-time', true)) > $uw_classrooms_options['location_data_timeout'] )
+  if ( $_SERVER['REQUEST_TIME'] - get_post_meta($post->ID, 'uw-location-data-time', true) > $uw_classrooms_options['location_data_timeout']*60*60 )
     $force = true;
 
   if ( !$force &&
@@ -358,7 +432,7 @@ function get_location_assets($post = null, $force = false)
   if ( !($post instanceof WP_Post) )
     $post = get_post($post);
 
-  if ( ($_SERVER['REQUEST_TIME'] - get_post_meta($post->ID, 'uw-location-assets-time', true)) > $uw_classrooms_options['location_assets_timeout'] )
+  if ( $_SERVER['REQUEST_TIME'] - get_post_meta($post->ID, 'uw-location-assets-time', true) > $uw_classrooms_options['location_assets_timeout']*60*60 )
     $force = true;
 
   if ( !$force &&
@@ -735,19 +809,7 @@ function buildings_handler()
 {
   $walker = new Walker_Page_FirstLetters;
 
-  $building_list = get_posts(array(
-				   'post_type' => 'page',
-				   'numberposts' => -1,
-				   'orderby' => 'post_title',
-				   'tax_query' => array(
-							array(
-							      'taxonomy' => 'location-type',
-							      'field' => 'slug',
-							      'terms' => 'building',
-							      'include_children' => false,
-							      )
-							)
-				   ));
+  $building_list = get_location_pages(false);
 
   echo '<div class="buildings"><ul>';
   wp_list_pages(array('include' => array_map(function($page) { return $page->ID; }, $building_list),
@@ -768,7 +830,7 @@ function uw_classrooms_building_content()
   if ( !has_term('building', 'location-type') )
     return $content;
 
-  $room_list = get_pages(array('child_of' => $post->ID));
+  $room_list = get_location_pages($post->ID);
 
   $content .= '
       <table>
@@ -831,8 +893,8 @@ function uw_classrooms_building_content()
 }
 
 
-add_action('save_post_page', 'action_save_post_page', 10, 2);
-function action_save_post_page($post_id, $post) {
+add_action('save_post_page', 'action_save_post_page', 10, 3);
+function action_save_post_page($post_id, $post, $update) {
   if ( defined( 'DOING_AUTOSAVE' ) && DOING_AUTOSAVE )
     return $post_id;
 
@@ -841,10 +903,14 @@ function action_save_post_page($post_id, $post) {
 
   add_all_parent_terms('location-type', $post_id);
 
-  if ( isset($_POST['uw_location_refresh_nonce']) &&
+  if ( $update &&
+       isset($_POST['uw_location_refresh_nonce']) &&
        wp_verify_nonce($_POST['uw_location_refresh_nonce'], 'uw_location_refresh_action') &&
        isset($_POST['uw_location_refresh']) ) {
     switch ($_POST['uw_location_refresh']) {
+    case 'pages':
+      get_location_pages(false, true);
+      break;
     case 'data':
       get_location_data($post_id, true);
       break;
@@ -876,18 +942,30 @@ function action_add_meta_boxes_page() {
   add_meta_box('uw-location-refresh',
 	       "Location Metadata",
 	       function($post) {
+
+		 if ( !get_post_meta($post->ID, 'uw-location-sys-id', true) && $post->ID != get_option('page_on_front') ) {
+		   echo '<p>This is not a location page, or uw-location-sys-id is not set.</p>';
+		   return;
+		 }
+
 		 // Add a nonce field so we can check for it later.
 		 wp_nonce_field('uw_location_refresh_action', 'uw_location_refresh_nonce');
 
-		 echo '<pre>' . json_encode(get_post_meta($post->ID, 'uw-location-data', true), JSON_PRETTY_PRINT) . '</pre>';
-		 printf('<p>age: %.2f hours</p>', ($_SERVER['REQUEST_TIME'] - get_post_meta($post->ID, 'uw-location-data-time', true)) / 60 / 60);
-		 echo '<button id="uw_location_refresh_data" name="uw_location_refresh" value="data"><span>Refresh Location Data</span></button>';
+		 printf('<p>Location Pages age: %.2f hours</p>', ($_SERVER['REQUEST_TIME'] - get_option('uw-location-pages-time', true))/60/60);
+		 echo '<button id="uw_location_refresh_pages" name="uw_location_refresh" value="pages"><span>Refresh Location Pages</span></button>';
 
-		 echo '<pre>' . json_encode(get_post_meta($post->ID, 'uw-location-assets', true), JSON_PRETTY_PRINT) . '</pre>';
-		 printf('<p>age: %.2f hours</p>', ($_SERVER['REQUEST_TIME'] - get_post_meta($post->ID, 'uw-location-assets-time', true)) / 60 / 60);
-		 echo '<button id="uw_location_refresh_assets" name="uw_location_refresh" value="assets"><span>Refresh Location Assets</span></button>';
+		 if ( get_post_meta($post->ID, 'uw-location-sys-id', true) ) {
+		   echo '<pre>' . json_encode(get_post_meta($post->ID, 'uw-location-data', true), JSON_PRETTY_PRINT) . '</pre>';
+		   printf('<p>Location Data age: %.2f hours</p>', ($_SERVER['REQUEST_TIME'] - get_post_meta($post->ID, 'uw-location-data-time', true))/60/60);
+		   echo '<button id="uw_location_refresh_data" name="uw_location_refresh" value="data"><span>Refresh Location Data</span></button>';
 
-		 echo '<p></p>';
-		 echo '<button id="uw_location_refresh_attributes" name="uw_location_refresh" value="attributes"><span>Re-import Location Attributes</span></button>';
+		   echo '<pre>' . json_encode(get_post_meta($post->ID, 'uw-location-assets', true), JSON_PRETTY_PRINT) . '</pre>';
+		   printf('<p>Location Assets age: %.2f hours</p>', ($_SERVER['REQUEST_TIME'] - get_post_meta($post->ID, 'uw-location-assets-time', true))/60/60);
+		   echo '<button id="uw_location_refresh_assets" name="uw_location_refresh" value="assets"><span>Refresh Location Assets</span></button>';
+
+		   echo '<p></p>';
+		   echo '<button id="uw_location_refresh_attributes" name="uw_location_refresh" value="attributes"><span>Re-import Location Attributes</span></button>';
+		 }
+
 	       });
 }
